@@ -1,2291 +1,937 @@
 /* ============================================================
-   main.js — Core game engine, state, rendering, event handling
-   Loaded as type="module". Reads GAME_DATA from window.
+   main.js - Weekly strategy sim
    ============================================================ */
 
-// ── Wait for constants.js to populate window.GAME_DATA ──
-const { CAREER, UPGRADES, HEROES, SKILLS, OFFICE_UPGRADES, INCIDENTS, ACHIEVEMENTS, DIFFICULTY_MODES } = window.GAME_DATA;
-const SFX = window.SFX;
-const FEEDBACK_ENDPOINT = 'https://xthqp43m7fbaunjuvalsg5qgdm0ooggz.lambda-url.us-east-1.on.aws/';
+(() => {
+  const { CAREER, BOSS_ARCHETYPES, WEEKLY_ACTIONS, POLITICAL_MOVES, CONSEQUENCES, EVENT_TEMPLATES, STAFF_POOL } = window.GAME_DATA;
+  const SFX = window.SFX || {};
+  const SAVE_KEY = 'sdh_strategy_v1';
+  const HOURS_PER_WEEK = 40;
+  const START_TEAM = 4;
+  const SLATE_SIZE = 3;
 
-// ══════════════════════════════════════════════════════════════
-// STATE
-// ══════════════════════════════════════════════════════════════
-let S = buildDefaultState();
+  let S = null;
+  let toastTimer = null;
 
-function buildDefaultState() {
-  return {
-    // Resources
-    tickets: 0,
-    lifetimeTickets: 0,
-    // Progression
-    level: 1,
-    xp: 0,
-    xpRequired: 100,
-    skillPoints: 0,
-    // Career / prestige
-    careerTier: 0,
-    prestiges: 0,
-    prestigeMultiplier: 1.0,
-    officePerksChosen: [],
-    officeDraftChoices: [],
-    // Difficulty & balancing controls
-    difficultyId: 'medium',
-    strikes: 0,
-    // Stats
-    basePerClick: 1,
-    basePerSec: 0,
-    // Combo
-    combo: 0,
-    comboTimer: null,
-    maxCombo: 0,
-    // Skill unlocks (ids)
-    unlockedSkills: [],
-    // Upgrade ownership { id: count }
-    upgradeOwned: {},
-    // Hero state { id: { owned, level, xp, status, morale, absenceDays } }
-    heroState: {},
-    // Tracking day progression
-    gameDay: 1,
-    dayProgress: 0,
-    // Guided onboarding flags
-    tutorialDismissed: false,
-    tutorialFirstClickDone: false,
-    tutorialFirstRecruitDone: false,
-    tutorialFirstUpgradeDone: false,
-    tutorialFirstIncidentSeen: false,
-    tutorialFirstIncidentResolved: false,
-    // Shift state
-    clockedOut: false,
-    clockedOutAt: null,
-    restedBuffUntil: 0,
-    // Heroes currently available for hire
-    applicantPool: [],
-    // Metadata for active recruit candidates (bad hire flags/hints)
-    recruitCandidateMeta: {},
-    // Achievements earned
-    achievedIds: [],
-    // Stats for achievement checks
-    incidentsResolved: 0,
-    dispatches: 0,
-    upgradesPurchased: 0,
-    heroesOwned: 0,
-    // Skill-driven modifiers
-    skillMods: {
-      perClick: 0,
-      perSec: 0,
-      perSecMult: 0,
-      xpMult: 0,
-      comboTime: 1.0,
-      critChance: 0,
-      critMult: 1,
-      squadMult: 0,
-      offlineHours: 4,
-      prestigeMult: 1.0,
-      globalMult: 1.0,
-    },
-    // Achievement-driven modifiers
-    achMods: {
-      perClick: 0,
-      perSec: 0,
-      clickMult: 0,
-      globalMult: 0,
-      squadMult: 0,
-      prestigeMult: 0,
-      skillPoints: 0,
-    },
-    officeMods: {
-      perClick: 0,
-      perSec: 0,
-      clickMult: 0,
-      xpMult: 0,
-      globalMult: 0,
-      incidentRewardMult: 0,
-    },
-    // Timestamps
-    lastSave: Date.now(),
-    lastTick: Date.now(),
-    lastBadHirePenaltyTick: Date.now(),
-  };
-}
+  const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+  const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
+  const fmtMoney = (n) => n >= 1000000 ? `$${(n / 1000000).toFixed(2)}M` : n >= 1000 ? `$${(n / 1000).toFixed(1)}K` : `$${Math.round(n).toLocaleString()}`;
+  const pct = (n) => `${Math.round(n)}%`;
 
-// ══════════════════════════════════════════════════════════════
-// HELPERS
-// ══════════════════════════════════════════════════════════════
-function fmt(n) {
-  if (n >= 1e12) return (n / 1e12).toFixed(2) + 'T';
-  if (n >= 1e9)  return (n / 1e9 ).toFixed(2) + 'B';
-  if (n >= 1e6)  return (n / 1e6 ).toFixed(2) + 'M';
-  if (n >= 1e3)  return (n / 1e3 ).toFixed(2) + 'K';
-  return Math.floor(n).toLocaleString();
-}
+  const bonusByRarity = { common: 0, uncommon: 4, rare: 8, epic: 12, legendary: 18 };
+  const bossById = Object.fromEntries(BOSS_ARCHETYPES.map((boss) => [boss.id, boss]));
 
-function fmtDecimal(n, d = 1) {
-  if (n >= 1e9)  return (n / 1e9).toFixed(d) + 'B';
-  if (n >= 1e6)  return (n / 1e6).toFixed(d) + 'M';
-  if (n >= 1e3)  return (n / 1e3).toFixed(d) + 'K';
-  return n.toFixed(d);
-}
+  function currentCareer(state = S) { return CAREER[state.careerTier] || CAREER[0]; }
+  function weeklyPay(state = S) { return currentCareer(state).annualSalary / 52; }
+  function currentBoss(state = S) { return bossById[state.bossState.archetypeId] || BOSS_ARCHETYPES[0]; }
+  function getOpenHeadcount(state = S) { return Math.max(0, currentCareer(state).headcount - state.staffState.length); }
+  function getOpenSupervisorSlots(state = S) { return Math.max(0, currentCareer(state).supervisorSlots - state.staffState.filter((s) => s.isSupervisor).length); }
+  function getSupervisorCapacity(state = S) { return state.careerTier >= 7 ? 7 : state.careerTier >= 5 ? 6 : 5; }
+  function staffById(id, state = S) { return state.staffState.find((staff) => staff.id === id) || null; }
+  function candidateById(id, state = S) { return state.candidateSlate.find((staff) => staff.id === id) || null; }
+  function directReports(managerId, state = S) { return state.staffState.filter((staff) => staff.managerId === managerId); }
+  function average(items, key) { return items.length ? items.reduce((sum, item) => sum + item[key], 0) / items.length : 0; }
+  function makeId(prefix) { return `${prefix}_${Math.random().toString(36).slice(2, 9)}`; }
 
-function getDifficulty() {
-  return DIFFICULTY_MODES.find((d) => d.id === S.difficultyId) || DIFFICULTY_MODES.find((d) => d.id === 'medium') || DIFFICULTY_MODES[0];
-}
-
-function recalcOfficeMods() {
-  const totals = {
-    perClick: 0,
-    perSec: 0,
-    clickMult: 0,
-    xpMult: 0,
-    globalMult: 0,
-    incidentRewardMult: 0,
-  };
-
-  (S.officePerksChosen || []).forEach(id => {
-    const perk = OFFICE_UPGRADES.find(x => x.id === id);
-    if (!perk || !perk.effect) return;
-    Object.entries(perk.effect).forEach(([key, value]) => {
-      totals[key] = (totals[key] || 0) + value;
-    });
-  });
-
-  S.officeMods = totals;
-}
-
-function rollOfficeDraftChoices() {
-  const pool = OFFICE_UPGRADES.filter(perk => !(S.officePerksChosen || []).includes(perk.id));
-  if (pool.length === 0) {
-    S.officeDraftChoices = [];
-    return [];
+  function shiftAllStaff(field, delta) {
+    S.staffState.forEach((staff) => { staff[field] = clamp(staff[field] + delta, 0, 100); });
   }
 
-  const picks = [...pool]
-    .sort(() => Math.random() - 0.5)
-    .slice(0, Math.min(3, pool.length))
-    .map(perk => perk.id);
-
-  S.officeDraftChoices = picks;
-  return picks;
-}
-
-function getIncidentRewardMultiplier() {
-  return 1 + (S.officeMods?.incidentRewardMult || 0);
-}
-
-function dampenBonus(sum) {
-  if (!sum || sum <= 0) return 0;
-  return Math.sqrt(sum);
-}
-
-function applySoftCap(value, knee = 180, exponent = 0.8) {
-  if (!value || value <= 0) return 0;
-  if (value <= knee) return value;
-  return knee * Math.pow(value / knee, exponent);
-}
-
-function getCareerRequirement(tier) {
-  const d = getDifficulty();
-  return Math.floor((tier?.xpRequired || 0) * (d.careerScale || 1));
-}
-
-function getHeroRecruitCost(h) {
-  const d = getDifficulty();
-  return Math.max(1, Math.floor(h.recruitCost * (d.recruitCostMultiplier || 1)));
-}
-
-function getHeroLevelCost(h, currentLevel = 1) {
-  const d = getDifficulty();
-  return Math.max(1, Math.floor(h.levelUpBaseCost * Math.pow(1.42, Math.max(0, currentLevel - 1)) * (d.heroLevelCostMultiplier || 1)));
-}
-
-function getHeroFireCost(h, hs) {
-  const d = getDifficulty();
-  const base = 120 + h.recruitCost + h.levelUpBaseCost * Math.max(1, (hs?.level || 1) * 0.5);
-  return Math.max(1, Math.floor(base * (d.fireCostMultiplier || 0.7)));
-}
-
-function getHeroPenaltyHintLevel(meta, now = Date.now()) {
-  if (!meta || !meta.badHire) return 0;
-  const age = now - (meta.discoveredAt || now);
-  if (age >= 150_000) return 3;
-  if (age >= 90_000) return 2;
-  if (age >= 30_000) return 1;
-  return 0;
-}
-
-function xpForLevel(lvl) {
-  return Math.floor(100 * Math.pow(lvl, 1.55));
-}
-
-// ══════════════════════════════════════════════════════════════
-// BAD HIRE MORALE DRAIN
-// ══════════════════════════════════════════════════════════════
-function applyBadHireMoraleDrain() {
-  const now = Date.now();
-  const elapsed = now - (S.lastBadHirePenaltyTick || now);
-  if (elapsed < 3000) return; // Only run every 3 seconds
-  S.lastBadHirePenaltyTick = now;
-
-  // Count active bad hires
-  let badCount = 0;
-  HEROES.forEach(h => {
-    const hs = S.heroState[h.id];
-    if (hs && hs.owned && hs.badHire && hs.status === 'Active') {
-      badCount++;
-      const ownedMs = now - (hs.ownedAt || now);
-      const newHintLevel = ownedMs >= 150000 ? 3 : ownedMs >= 90000 ? 2 : ownedMs >= 30000 ? 1 : 0;
-      if (newHintLevel > (hs.badHireHintLevel || 0)) {
-        hs.badHireHintLevel = newHintLevel;
-        if (newHintLevel === 1) toast(`🤨 ${h.name} is saying all the right buzzwords and none of the right things.`, 'red');
-        if (newHintLevel === 2) toast(`🚩 ${h.name} is dragging the team down. People are starting to notice.`, 'red');
-        if (newHintLevel === 3) toast(`☠️ ${h.name} has achieved full bad-hire visibility. Nobody trusts them anymore.`, 'red');
-      }
-    }
-  });
-  if (badCount === 0) {
-    // Slowly recover morale when no bad hires present
-    HEROES.forEach(h => {
-      const hs = S.heroState[h.id];
-      if (hs && hs.owned && !hs.badHire) {
-        hs.badHirePenalty = Math.min(1, (hs.badHirePenalty || 1) + 0.005);
-      }
-    });
-    return;
+  function recomputeMorale() {
+    S.morale = clamp(Math.round(average(S.staffState, 'morale') || 0), 0, 100);
   }
 
-  // Each bad hire reduces all other heroes' effective CPS by 1-2%
-  const drainPerBad = 0.015; // 1.5% per bad hire per 3 seconds
-  HEROES.forEach(h => {
-    const hs = S.heroState[h.id];
-    if (hs && hs.owned && !hs.badHire) {
-      hs.badHirePenalty = Math.max(0.3, (hs.badHirePenalty || 1) - (drainPerBad * badCount));
-    }
-  });
-}
-
-// ══════════════════════════════════════════════════════════════
-// STRIKE RECOVERY EVENTS
-// ══════════════════════════════════════════════════════════════
-const STRIKE_RECOVERY_EVENTS = [
-  { name: 'CIO Knows My Dad', text: '👔 Nepotism wins again! Strike forgiven through connections.', icon: '🤝' },
-  { name: 'Fixed a Big Problem Publicly', text: '🦸 You heroically fixed a major outage! (Never mind that you caused it.) -1 strike!', icon: '🔧' },
-  { name: 'Blamed It On The Intern', text: '🎯 Strike reassigned to the intern. They probably deserved it anyway.', icon: '📋' },
-  { name: 'Server Room Fire Drill', text: '🔥 Mandatory evacuation! By the time everyone got back, your mistake was forgotten.', icon: '🚨' },
-  { name: 'Vendor Took The Fall', text: '🏢 The outsourcer absorbed the blame. That is what SLAs are for, right?', icon: '📝' },
-  { name: 'Beer Friday Saved You', text: '🍺 Team bonding erased the grudge. Nothing a cold one cannot fix.', icon: '🎉' },
-  { name: 'Convenient System Crash', text: '💥 A well-timed BSOD wiped the incident log. What strike?', icon: '💻' },
-  { name: 'CEO Distracted by AI Hype', text: '🤖 Leadership is too busy talking about AI to remember your screw-up.', icon: '✨' },
-];
-
-function rollStrikeRecovery() {
-  if (S.strikes <= 0) return;
-  const chance = 0.07; // 7% chance per incident cycle
-  if (Math.random() > chance) return;
-
-  const evt = STRIKE_RECOVERY_EVENTS[Math.floor(Math.random() * STRIKE_RECOVERY_EVENTS.length)];
-  S.strikes = Math.max(0, S.strikes - 1);
-  toast(`${evt.icon} ${evt.name}: ${evt.text} Strikes: ${S.strikes}/3`, 'gold');
-  SFX.levelUp();
-  renderStats();
-}
-
-function toast(msg, type = '') {
-  const el = document.createElement('div');
-  el.className = 'toast' + (type ? ' ' + type : '');
-  el.textContent = msg;
-  document.getElementById('toast-area').appendChild(el);
-  requestAnimationFrame(() => el.classList.add('visible'));
-  setTimeout(() => {
-    el.classList.remove('visible');
-    setTimeout(() => el.remove(), 350);
-  }, 2800);
-}
-
-function setActiveTab(tabName) {
-  document.querySelectorAll('.tab-btn').forEach(b => {
-    const active = b.dataset.tab === tabName;
-    b.classList.toggle('active', active);
-    b.setAttribute('aria-selected', active ? 'true' : 'false');
-  });
-  document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === `tab-${tabName}`));
-  if (tabName === 'squad') renderSquad();
-  if (tabName === 'upgrades') renderUpgrades();
-  if (tabName === 'skills') renderSkills();
-  if (tabName === 'achievements') renderAchievements();
-  if (tabName === 'stats') renderStatsTab();
-}
-
-function getCheapestRecruitTarget() {
-  const candidates = S.applicantPool
-    .map(id => HEROES.find(x => x.id === id))
-    .filter(Boolean)
-    .map(hero => ({ hero, cost: getHeroRecruitCost(hero) }));
-  if (!candidates.length) return null;
-  return candidates.sort((a, b) => a.cost - b.cost)[0];
-}
-
-function getCheapestUpgradeTarget() {
-  const candidates = UPGRADES.map(upgrade => ({ upgrade, cost: upgradeCost(upgrade) }));
-  if (!candidates.length) return null;
-  return candidates.sort((a, b) => a.cost - b.cost)[0];
-}
-
-function renderOnboarding() {
-  const panel = document.getElementById('onboarding-panel');
-  if (!panel) return;
-
-  const recruitTarget = getCheapestRecruitTarget();
-  const upgradeTarget = getCheapestUpgradeTarget();
-  const steps = [
-    { done: S.tutorialFirstClickDone, text: 'Resolve your first ticket and start the queue moving.' },
-    {
-      done: S.tutorialFirstRecruitDone,
-      text: recruitTarget
-        ? `Recruit your first hero (${recruitTarget.hero.name} is ${fmt(recruitTarget.cost)} tickets right now).`
-        : 'Recruit your first hero so tickets keep moving without your fingers.',
-    },
-    {
-      done: S.tutorialFirstUpgradeDone,
-      text: upgradeTarget
-        ? `Buy your first upgrade (${upgradeTarget.upgrade.name} starts at ${fmt(upgradeTarget.cost)} tickets).`
-        : 'Buy your first upgrade and begin automating your way into management.',
-    },
-    { done: S.tutorialFirstIncidentResolved, text: 'Survive your first incident without collecting a strike.' },
-  ];
-
-  const allDone = steps.every(step => step.done);
-  if (S.tutorialDismissed || allDone) {
-    panel.classList.add('hidden');
-    return;
-  }
-  panel.classList.remove('hidden');
-
-  document.getElementById('onboarding-checklist').innerHTML = steps.map(step => `
-    <div class="onboarding-item ${step.done ? 'done' : ''}">
-      <span class="onboarding-mark">${step.done ? '✓' : '•'}</span>
-      <span>${step.text}</span>
-    </div>
-  `).join('');
-
-  let tip = 'Clear a few tickets to get the queue moving.';
-  let actionLabel = 'Resolve Some Tickets';
-  let action = 'click';
-
-  const recruitNeeded = recruitTarget ? Math.max(0, recruitTarget.cost - S.tickets) : Infinity;
-  const upgradeNeeded = upgradeTarget ? Math.max(0, upgradeTarget.cost - S.tickets) : Infinity;
-  const shouldPrioritizeUpgrade = !S.tutorialFirstUpgradeDone && !S.tutorialFirstRecruitDone && upgradeNeeded < recruitNeeded;
-
-  if (!S.tutorialFirstClickDone) {
-    tip = 'Mash Resolve Ticket a few times. Momentum first, dignity later.';
-    actionLabel = 'Resolve Some Tickets';
-    action = 'click';
-  } else if (shouldPrioritizeUpgrade) {
-    if (upgradeTarget) {
-      tip = upgradeNeeded > 0
-        ? `${upgradeTarget.upgrade.name} is the fastest power spike at ${fmt(upgradeTarget.cost)} tickets. Need ${fmt(upgradeNeeded)} more before you can stop brute-forcing the queue.`
-        : `${upgradeTarget.upgrade.name} is affordable now. Open Upgrades and buy your first bit of process theater.`;
-    } else {
-      tip = 'Now buy one upgrade. Tools beat heroics, mostly.';
-    }
-    actionLabel = 'Open Upgrades';
-    action = 'upgrades';
-  } else if (!S.tutorialFirstRecruitDone) {
-    if (recruitTarget) {
-      tip = recruitNeeded > 0
-        ? `${recruitTarget.hero.name} is your cheapest hire at ${fmt(recruitTarget.cost)} tickets. Need ${fmt(recruitNeeded)} more before delegation begins.`
-        : `${recruitTarget.hero.name} is affordable now. Open Squad and stop doing all the work yourself.`;
-    } else {
-      tip = 'Your first recruit is the first taste of passive income. Open Squad and hire one.';
-    }
-    actionLabel = 'Open Squad';
-    action = 'squad';
-  } else if (!S.tutorialFirstUpgradeDone) {
-    if (upgradeTarget) {
-      tip = upgradeNeeded > 0
-        ? `${upgradeTarget.upgrade.name} is the cheapest upgrade at ${fmt(upgradeTarget.cost)} tickets. Need ${fmt(upgradeNeeded)} more to start automating.`
-        : `${upgradeTarget.upgrade.name} is affordable now. Open Upgrades and buy your first bit of process theater.`;
-    } else {
-      tip = 'Now buy one upgrade. Tools beat heroics, mostly.';
-    }
-    actionLabel = 'Open Upgrades';
-    action = 'upgrades';
-  } else if (activeIncident) {
-    tip = `Incident live: ${activeIncident.title}. Hit respond now before HR turns this into a personality test.`;
-    actionLabel = 'Respond Now';
-    action = 'incident';
-  } else {
-    tip = 'Your last quick-start step is your first real incident. Review the incident rules now so you do not panic decoratively later.';
-    actionLabel = 'Review Incident Rules';
-    action = 'help';
+  function pickFlags(hero) {
+    const flags = [];
+    if (hero.baseCps >= 3.2 || hero.rarity === 'epic' || hero.rarity === 'legendary') flags.push('high-performer');
+    if (Math.random() < 0.18) flags.push('bullshitter');
+    if (Math.random() < 0.18) flags.push('hidden-problem');
+    if (Math.random() < 0.14) flags.push('flight-risk');
+    if (!flags.length) flags.push(pick(['steady', 'steady', 'steady', 'burned-out']));
+    return flags;
   }
 
-  document.getElementById('onboarding-tip').textContent = tip;
-  const btn = document.getElementById('btn-onboarding-action');
-  btn.textContent = actionLabel;
-  btn.dataset.action = action;
-}
-
-function floatNumber(text, x, y) {
-  const el = document.createElement('div');
-  el.className = 'float-num';
-  el.textContent = text;
-  el.style.left = x + 'px';
-  el.style.top  = y + 'px';
-  document.getElementById('float-layer').appendChild(el);
-  setTimeout(() => el.remove(), 950);
-}
-
-// ══════════════════════════════════════════════════════════════
-// DERIVED STATS
-// ══════════════════════════════════════════════════════════════
-function calcPerClick() {
-  if (S.clockedOut) return 0;
-  const sm = S.skillMods;
-  const am = S.achMods;
-  const om = S.officeMods || {};
-  const diff = getDifficulty();
-  const restedBonus = Date.now() < (S.restedBuffUntil || 0) ? 1.15 : 1;
-  const base = S.basePerClick + sm.perClick + am.perClick + (om.perClick || 0);
-  const clickMult = 1 + sm.critChance + am.clickMult + (om.clickMult || 0);
-  const global = (1 + dampenBonus(sm.globalMult + am.globalMult + (om.globalMult || 0))) * diff.incomeMultiplier * S.prestigeMultiplier * restedBonus;
-  return Math.max(1, applySoftCap(base * clickMult * global, 120, 0.88));
-}
-
-function calcPerSec() {
-  const sm = S.skillMods;
-  const am = S.achMods;
-  const om = S.officeMods || {};
-  const diff = getDifficulty();
-  const restedBonus = Date.now() < (S.restedBuffUntil || 0) ? 1.15 : 1;
-  const offShiftPenalty = S.clockedOut ? 0.6 : 1;
-  // Base from upgrades
-  let upgradePs = UPGRADES.reduce((acc, u) => {
-    const owned = S.upgradeOwned[u.id] || 0;
-    return acc + (u.perSecBonus || 0) * owned;
-  }, 0);
-  // Squad contribution
-  let squadPs = 0;
-  HEROES.forEach(h => {
-    const hs = S.heroState[h.id];
-    if (!hs || !hs.owned) return;
-    if (hs.status && hs.status !== 'Active') return; // Out on crisis
-    const lvlMult = 1 + (hs.level - 1) * 0.25;
-    const moralePenalty = hs.badHire ? 1 : (typeof hs.badHirePenalty === 'number' ? hs.badHirePenalty : 1);
-    squadPs += h.baseCps * lvlMult * moralePenalty;
-  });
-  squadPs = applySoftCap(squadPs, 180, 0.82);
-  upgradePs = applySoftCap(upgradePs, 180, 0.82);
-  squadPs *= (1 + sm.squadMult + am.squadMult);
-
-  const flat = sm.perSec + am.perSec + (om.perSec || 0);
-  const psMult = 1 + sm.perSecMult;
-  const squadBonus = 1 + dampenBonus(sm.squadMult + am.squadMult);
-  const global = (1 + dampenBonus(sm.globalMult + am.globalMult + (om.globalMult || 0))) * diff.incomeMultiplier * S.prestigeMultiplier * restedBonus;
-  return applySoftCap((upgradePs + squadPs + flat) * psMult * squadBonus * global * offShiftPenalty, 220, 0.8);
-}
-
-function calcXpGain(tickets) {
-  const base = tickets * 0.1;
-  const mult = 1 + S.skillMods.xpMult + (S.officeMods?.xpMult || 0);
-  // Sam Voss xpBoost
-  const samBoost = (S.heroState['sam'] && S.heroState['sam'].owned) ? 1.5 : 1;
-  return base * mult * samBoost * (getDifficulty().xpMultiplier || 1);
-}
-
-// ══════════════════════════════════════════════════════════════
-// CORE CLICK
-// ══════════════════════════════════════════════════════════════
-function handleClick(evt) {
-  if (S.clockedOut) {
-    toast('🕒 You are clocked out. Go home, you magnificent work goblin.', 'red');
-    return;
-  }
-  const sm = S.skillMods;
-  let amount = calcPerClick();
-  S.totalClicks = (S.totalClicks || 0) + 1;
-
-  if (!S.tutorialFirstClickDone) {
-    S.tutorialFirstClickDone = true;
-    toast('🧾 Queue open. Good. Now turn panic into throughput.', 'gold');
-    renderOnboarding();
-  }
-
-  // Critical click
-  if (sm.critChance > 0 && Math.random() < sm.critChance) {
-    amount *= sm.critMult;
-    floatNumber(`💥 CRIT! +${fmt(amount)}`, evt.clientX, evt.clientY);
-    SFX.crit();
-  } else {
-    floatNumber(`+${fmt(amount)}`, evt.clientX, evt.clientY);
-    SFX.click();
-  }
-
-  // Combo
-  S.combo = Math.min(S.combo + 1, 200);
-  if (S.combo > S.maxCombo) S.maxCombo = S.combo;
-  const comboMult = 1 + (S.combo - 1) * 0.02;
-  amount *= comboMult;
-  if (S.combo > 1 && S.combo % 10 === 0) SFX.comboMilestone();
-
-  // Reset combo timer
-  clearTimeout(S.comboTimer);
-  const comboMs = 1500 * S.skillMods.comboTime;
-  S.comboTimer = setTimeout(() => { S.combo = 0; updateComboUI(); }, comboMs);
-
-  gainTickets(amount);
-  gainXp(calcXpGain(amount));
-  updateComboUI();
-
-  // Visual feedback
-  const btn = document.getElementById('main-clicker');
-  btn.classList.remove('click-animate');
-  void btn.offsetWidth;
-  btn.classList.add('click-animate');
-  btn.addEventListener('animationend', () => btn.classList.remove('click-animate'), { once: true });
-
-  // Burst
-  const burst = document.querySelector('.click-burst');
-  burst.classList.remove('pop');
-  void burst.offsetWidth;
-  burst.classList.add('pop');
-  burst.addEventListener('animationend', () => burst.classList.remove('pop'), { once: true });
-
-  checkAchievements();
-}
-
-// ══════════════════════════════════════════════════════════════
-// GAIN FUNCTIONS
-// ══════════════════════════════════════════════════════════════
-function gainTickets(amount) {
-  S.tickets += amount;
-  S.lifetimeTickets += amount;
-  renderStats();
-  updateButtonStates();
-}
-
-function updateButtonStates() {
-  document.querySelectorAll('.upgrade-card').forEach(card => {
-    const id = card.dataset.upgrade;
-    const u = UPGRADES.find(x => x.id === id);
-    if (!u) return;
-    const btn = card.querySelector('.btn-buy');
-    if (btn) btn.disabled = S.tickets < upgradeCost(u);
-  });
-  document.querySelectorAll('.hero-card').forEach(card => {
-    const id = card.dataset.hero;
-    const h = HEROES.find(x => x.id === id);
-    if (!h) return;
-    const hs = S.heroState[id];
-    if (hs && hs.owned) {
-      const lvlUpCost = getHeroLevelCost(h, hs.level);
-      const btn = card.querySelector('.btn-levelup');
-      if (btn) btn.disabled = S.tickets < lvlUpCost;
-      const fireBtn = card.querySelector('.btn-fire');
-      if (fireBtn) {
-        const ownedMs = Date.now() - (hs.ownedAt || Date.now());
-        const canFire = ownedMs >= 120_000;
-        const fireCost = getHeroFireCost(h, hs);
-        fireBtn.textContent = canFire ? `Fire (${fmt(fireCost)} tickets)` : `Fire (${Math.ceil((120_000 - ownedMs) / 1000)}s)`;
-        fireBtn.disabled = !canFire || S.tickets < fireCost;
-      }
-    } else {
-      const btn = card.querySelector('.btn-recruit');
-      if (btn) btn.disabled = S.tickets < getHeroRecruitCost(h);
-    }
-  });
-}
-
-function gainXp(amount) {
-  S.xp += amount;
-  while (S.xp >= S.xpRequired) {
-    S.xp -= S.xpRequired;
-    S.level++;
-    S.skillPoints++;
-    S.xpRequired = xpForLevel(S.level);
-    onLevelUp();
-  }
-  renderXpBar();
-}
-
-function onLevelUp() {
-  SFX.levelUp();
-  const firstBigLevel = S.level === 2;
-  toast(firstBigLevel ? '🎉 Level 2! Fine. You are now marginally employable. +1 Skill Point!' : `🎉 LEVEL UP! Now Level ${S.level}. +1 Skill Point!`, 'gold');
-  const btn = document.getElementById('main-clicker');
-  btn.classList.add('level-up-flash');
-  btn.addEventListener('animationend', () => btn.classList.remove('level-up-flash'), { once: true });
-  renderSkills();
-  renderStats();
-  checkAchievements();
-}
-
-// ══════════════════════════════════════════════════════════════
-// TICK (Idle Income)
-// ══════════════════════════════════════════════════════════════
-let tickInterval = null;
-
-function startTick() {
-  tickInterval = setInterval(() => {
-    applyBadHireMoraleDrain();
-    const ps = calcPerSec();
-    if (ps > 0) {
-      const earned = ps / 10; // 100ms ticks
-      gainTickets(earned);
-      gainXp(calcXpGain(earned));
-    }
-    checkPromotionReady();
-    checkAchievements();
-    updateDay();
-  }, 100);
-}
-
-function updateDay() {
-  S.dayProgress += 1; // 100ms = 1 tick
-  if (S.dayProgress >= 600) { // 60 seconds = 1 day
-    S.dayProgress = 0;
-    S.gameDay++;
-    triggerDailyEvents();
-    renderStats();
-  }
-}
-
-function triggerDailyEvents() {
-  const CRISIS_CHANCE = 0.05; // 5% chance per day someone has a crisis
-  const statusOptions = [
-    { name: 'Sick Kid', days: 3, msg: 'has a sick kid and is out for 3 days.' },
-    { name: 'Vacation', days: 7, msg: 'is on vacation for a week!' },
-    { name: 'Flu', days: 4, msg: 'caught the flu. Out for 4 days.' },
-    { name: 'Family Crisis', days: 5, msg: 'has a family emergency. Out for 5 days.' },
-    { name: 'Burnout', days: 2, msg: 'is feeling burnt out. Taking 2 mental health days.' },
-  ];
-
-  HEROES.forEach(h => {
-    const hs = S.heroState[h.id];
-    if (!hs || !hs.owned) return;
-
-    // Handle existing absences
-    if (hs.absenceDays > 0) {
-      hs.absenceDays--;
-      if (hs.absenceDays <= 0) {
-        if (hs.status === 'Training' && hs.pendingSkill) {
-          if (!h.skills) h.skills = [];
-          h.skills.push(hs.pendingSkill);
-          toast(`🎓 ${h.name} finished training: ${hs.pendingSkill}!`, 'gold');
-          hs.pendingSkill = null;
-        }
-        hs.status = 'Active';
-        hs.absenceDays = 0;
-        toast(`✅ ${h.name} is back online!`, 'green');
-        renderSquad();
-      }
-    }
-
-    // Roll for new crisis if active
-    if (hs.status === 'Active' && Math.random() < CRISIS_CHANCE) {
-      const crisis = statusOptions[Math.floor(Math.random() * statusOptions.length)];
-      hs.status = crisis.name;
-      hs.absenceDays = crisis.days;
-      toast(`🚨 ${h.name} ${crisis.msg}`, 'red');
-      SFX.error();
-      renderSquad();
-    }
-
-    // Boredom decay (if active but not worked)
-    if (hs.status === 'Active') {
-      hs.daysSinceLastTask = (hs.daysSinceLastTask || 0) + 1;
-      if (hs.daysSinceLastTask > 5) {
-        const boredomDecay = Math.floor(hs.daysSinceLastTask / 5);
-        hs.morale = Math.max(0, hs.morale - boredomDecay);
-        if (S.gameDay % 5 === 0 && hs.daysSinceLastTask > 10) {
-          toast(`😴 ${h.name} is getting bored...`, 'red');
-        }
-      }
-    }
-
-    // Resignation check
-    if (hs.morale < 25) {
-      const RESIGN_CHANCE = 0.15; // 15% chance per day if very low morale
-      if (Math.random() < RESIGN_CHANCE) {
-        toast(`⚠️ ${h.name} has RESIGNED due to low morale!`, 'red');
-        hs.owned = false;
-        S.heroesOwned--;
-        SFX.error();
-        renderSquad();
-        renderStats();
-        return; // Next hero
-      }
-    }
-  });
-}
-
-function startTraining(heroId) {
-  const h = HEROES.find(x => x.id === heroId);
-  const hs = S.heroState[heroId];
-  if (!h || !hs) return;
-
-  const cost = 2500 * (h.skills.length + 1); // Cost scales with skill count
-  if (S.tickets < cost) {
-    toast(`Not enough tickets for training! (${fmt(cost)}🎫)`, 'red');
-    SFX.error();
-    return;
-  }
-
-  S.tickets -= cost;
-  hs.status = 'Training';
-  hs.absenceDays = 3; // Training takes 3 days
-  
-  // Pick a new random skill from a global list if they don't have it
-  const potentialSkills = ["Automation", "AI/ML", "Cloud Native", "Security Pro", "Diagnostics", "Process Optimization", "Documentation"];
-  const newSkill = potentialSkills.find(s => !h.skills.includes(s));
-  
-  if (newSkill) {
-    toast(`🎓 ${h.name} started training for: ${newSkill}!`, 'gold');
-    // We'll actually add the skill once training finishes
-    hs.pendingSkill = newSkill;
-  } else {
-    toast(`🎓 ${h.name} is staying sharp!`, 'gold');
-  }
-
-  renderSquad();
-  renderStats();
-  SFX.purchase();
-}
-
-// ══════════════════════════════════════════════════════════════
-// UPGRADES
-// ══════════════════════════════════════════════════════════════
-function upgradeCost(upgrade) {
-  const owned = S.upgradeOwned[upgrade.id] || 0;
-  const difficulty = getDifficulty();
-  return Math.max(1, Math.floor(upgrade.baseCost * Math.pow(upgrade.costScale, owned) * (difficulty.upgradeCostMultiplier || 1)));
-}
-
-function buyUpgrade(id) {
-  const u = UPGRADES.find(x => x.id === id);
-  if (!u) return;
-  const cost = upgradeCost(u);
-  if (S.tickets < cost) {
-    const card = document.querySelector(`[data-upgrade="${id}"]`);
-    if (card) { card.classList.remove('shake-animate'); void card.offsetWidth; card.classList.add('shake-animate'); }
-    SFX.error();
-    toast('Not enough tickets!', 'red');
-    return;
-  }
-  S.tickets -= cost;
-  S.upgradeOwned[u.id] = (S.upgradeOwned[u.id] || 0) + 1;
-  S.upgradesPurchased++;
-  if (u.perClickBonus) S.basePerClick += u.perClickBonus;
-  SFX.purchase();
-  toast(`✅ Purchased: ${u.name}`, 'green');
-  if (!S.tutorialFirstUpgradeDone) {
-    S.tutorialFirstUpgradeDone = true;
-    toast('⚙️ First upgrade online. Congratulations, you have invented process.', 'gold');
-    renderOnboarding();
-  }
-  renderUpgrades();
-  renderStats();
-  checkAchievements();
-}
-
-// ══════════════════════════════════════════════════════════════
-// SQUAD / HEROES
-// ══════════════════════════════════════════════════════════════
-function recruitHero(id) {
-  const h = HEROES.find(x => x.id === id);
-  if (!h) return;
-  const recruitCost = getHeroRecruitCost(h);
-  const meta = (S.recruitCandidateMeta && S.recruitCandidateMeta[id]) || {};
-  if (S.tickets < recruitCost) {
-    SFX.error();
-    toast('Not enough tickets to recruit!', 'red');
-    return;
-  }
-  S.tickets -= recruitCost;
-  const now = Date.now();
-  S.heroState[id] = {
-    owned: true,
-    level: 1,
-    xp: 0,
-    status: 'Active',
-    morale: 100,
-    absenceDays: 0,
-    badHire: !!meta.badHire,
-    badHireFailChance: meta.badHire ? (meta.badHireFailChance || (0.4 + Math.random() * 0.2)) : 0,
-    badHireClue: meta.badHireClue || '',
-    ownedAt: now,
-    discoveredAt: now,
-    badHirePenalty: 1,
-    badHireHintLevel: 0,
-  };
-  S.applicantPool = S.applicantPool.filter(appId => appId !== id);
-  S.heroesOwned++;
-  SFX.recruit();
-  toast(`🦸 ${h.name} joined your squad!`, meta.badHire ? 'red' : 'gold');
-  if (!S.tutorialFirstRecruitDone) {
-    S.tutorialFirstRecruitDone = true;
-    toast('👥 First hire secured. Delegation: the first step toward management and plausible deniability.', 'gold');
-    renderOnboarding();
-  }
-  renderSquad();
-  renderStats();
-  checkAchievements();
-}
-
-function refreshJobBoard(cost = 0) {
-  if (cost > 0 && S.tickets < cost) {
-    SFX.error();
-    toast('Not enough tickets to refresh the board!', 'red');
-    return;
-  }
-  if (cost > 0) S.tickets -= cost;
-  
-  // Find all heroes we don't own yet
-  const unowned = HEROES.filter(h => !(S.heroState[h.id] && S.heroState[h.id].owned));
-  
-  // If we own everyone, don't crash
-  if (unowned.length === 0) {
-    S.applicantPool = [];
-    if (cost > 0) toast('There is no one left to hire!', 'gold');
-    renderSquad();
-    return;
-  }
-  
-  // Pick up to 4 random heroes
-  const poolSize = Math.min(4, unowned.length);
-  S.applicantPool = [];
-  S.recruitCandidateMeta = S.recruitCandidateMeta || {};
-  const shuffled = [...unowned].sort(() => 0.5 - Math.random());
-  const now = Date.now();
-  const selected = [];
-  for (let i = 0; i < poolSize; i++) {
-    const id = shuffled[i].id;
-    selected.push(id);
-    S.applicantPool.push(id);
-    S.recruitCandidateMeta[id] = {
-      ...(S.recruitCandidateMeta[id] || {}),
-      badHire: false,
-      discoveredAt: now,
-      badHireClue: S.recruitCandidateMeta[id]?.badHireClue || '',
+  function buildStaff(hero, managerId = 'player') {
+    const competence = clamp(Math.round(42 + hero.baseCps * 9 + (bonusByRarity[hero.rarity] || 0) + rand(-4, 6)), 35, 95);
+    const annualSalary = Math.round(52000 + hero.baseCps * 9000 + (bonusByRarity[hero.rarity] || 0) * 1800 + rand(-4000, 6000));
+    return {
+      id: makeId(hero.id),
+      poolId: hero.id,
+      name: hero.name,
+      role: hero.role,
+      emoji: hero.emoji,
+      rarity: hero.rarity,
+      skills: hero.skills || [],
+      managerId,
+      isSupervisor: false,
+      competence,
+      morale: rand(56, 74),
+      burnout: rand(10, 26),
+      loyalty: rand(48, 72),
+      managerRelationship: rand(46, 70),
+      annualSalary,
+      flags: pickFlags(hero),
+      notes: hero.desc,
     };
   }
 
-  if (selected.length > 0 && Math.random() < (getDifficulty().badHireChance || 0.12)) {
-    const badIdx = Math.floor(Math.random() * selected.length);
-    const badId = selected[badIdx];
-    const clues = [
-      'Keeps saying synergy.',
-      'Reply-all specialist.',
-      'Has a blockchain solution for everything.',
-      'Brings charts to simple outages.',
-    ];
-    const badMeta = S.recruitCandidateMeta[badId];
-    badMeta.badHire = true;
-    badMeta.discoveredAt = now;
-    badMeta.badHireFailChance = 0.4 + Math.random() * 0.2;
-    badMeta.badHireClue = clues[Math.floor(Math.random() * clues.length)];
-  }
-  
-  if (cost > 0) {
-    SFX.purchase();
-    toast('Job board refreshed!', 'green');
-    renderStats();
-  }
-  renderSquad();
-}
-
-function levelUpHero(id) {
-  const h = HEROES.find(x => x.id === id);
-  const hs = S.heroState[id];
-  if (!h || !hs) return;
-  const cost = getHeroLevelCost(h, hs.level);
-  if (S.tickets < cost) {
-    toast('Not enough tickets to level up!', 'red');
-    return;
-  }
-  S.tickets -= cost;
-  hs.level++;
-  toast(`⬆️ ${h.name} is now Level ${hs.level}!`, 'green');
-  renderSquad();
-  renderStats();
-}
-
-function fireHero(id) {
-  const h = HEROES.find(x => x.id === id);
-  if (!h) return;
-  const hs = S.heroState[id];
-  if (!hs || !hs.owned) return;
-  if (!hs.badHire) {
-    toast(`🧊 ${h.name} is a reliable hire. No reason to fire them.`, 'green');
-    return;
+  function usedPoolIds(state) {
+    return new Set([...state.staffState, ...state.candidateSlate].map((item) => item.poolId));
   }
 
-  const ownedMs = Date.now() - (hs.ownedAt || Date.now());
-  if (ownedMs < 120_000) {
-    toast(`🕒 ${h.name} is on the clock. Fire option unlocks after 2 minutes.`, 'red');
-    return;
-  }
-
-  const cost = getHeroFireCost(h, hs);
-  if (S.tickets < cost) {
-    toast(`Not enough tickets to fire ${h.name}!`, 'red');
-    SFX.error();
-    return;
-  }
-
-  S.tickets -= cost;
-  delete S.heroState[id];
-  S.heroesOwned--;
-  SFX.purchase();
-  toast(`🧯 ${h.name} removed from your roster.`, 'green');
-  renderSquad();
-  renderStats();
-}
-
-// ══════════════════════════════════════════════════════════════
-// SKILLS
-// ══════════════════════════════════════════════════════════════
-function buySkill(id) {
-  const skill = SKILLS.find(s => s.id === id);
-  if (!skill) return;
-  if (S.unlockedSkills.includes(id)) { toast('Already unlocked!'); return; }
-  const prereqsMet = skill.requires.every(r => S.unlockedSkills.includes(r));
-  if (!prereqsMet) { SFX.error(); toast('Unlock prerequisites first!', 'red'); return; }
-  if (S.skillPoints < skill.cost) { SFX.error(); toast('Not enough Skill Points!', 'red'); return; }
-  S.skillPoints -= skill.cost;
-  S.unlockedSkills.push(id);
-  applySkillEffect(skill);
-  SFX.skillUnlock();
-  toast(`🧠 Skill Unlocked: ${skill.name}!`, 'gold');
-  const node = document.querySelector(`[data-skill="${id}"]`);
-  if (node) {
-    node.classList.add('skill-unlock-ripple');
-    node.addEventListener('animationend', () => node.classList.remove('skill-unlock-ripple'), { once: true });
-  }
-  renderSkills();
-  renderStats();
-}
-
-function applySkillEffect(skill) {
-  const e = skill.effect;
-  const sm = S.skillMods;
-  if (e.perClick)    sm.perClick    += e.perClick;
-  if (e.perSec)      sm.perSec      += e.perSec;
-  if (e.perSecMult)  sm.perSecMult  += e.perSecMult;
-  if (e.xpMult)      sm.xpMult      += e.xpMult;
-  if (e.comboTime)   sm.comboTime   = sm.comboTime * e.comboTime;
-  if (e.critChance)  sm.critChance  += e.critChance;
-  if (e.critMult)    sm.critMult     = e.critMult;
-  if (e.squadMult)   sm.squadMult   += e.squadMult;
-  if (e.offlineHours)sm.offlineHours = e.offlineHours;
-  if (e.prestigeMult)sm.prestigeMult = sm.prestigeMult * e.prestigeMult;
-  if (e.globalMult)  sm.globalMult  += e.globalMult;
-}
-
-function reapplyAllSkills() {
-  S.skillMods = {
-    perClick: 0, perSec: 0, perSecMult: 0, xpMult: 0,
-    comboTime: 1.0, critChance: 0, critMult: 1,
-    squadMult: 0, offlineHours: 4, prestigeMult: 1.0, globalMult: 1.0,
-  };
-  S.unlockedSkills.forEach(id => {
-    const sk = SKILLS.find(s => s.id === id);
-    if (sk) applySkillEffect(sk);
-  });
-}
-
-// ══════════════════════════════════════════════════════════════
-// ACHIEVEMENTS
-// ══════════════════════════════════════════════════════════════
-function checkAchievements() {
-  ACHIEVEMENTS.forEach(a => {
-    if (S.achievedIds.includes(a.id)) return;
-    let current = 0;
-    if (a.stat === 'lifetime')  current = S.lifetimeTickets;
-    if (a.stat === 'heroes')    current = S.heroesOwned;
-    if (a.stat === 'upgrades')  current = S.upgradesPurchased;
-    if (a.stat === 'incidents') current = S.incidentsResolved;
-    if (a.stat === 'dispatches') current = S.dispatches;
-    if (a.stat === 'maxCombo')  current = S.maxCombo;
-    if (a.stat === 'prestiges') current = S.prestiges;
-    if (a.stat === 'level')     current = S.level;
-    if (current >= a.goal) {
-      S.achievedIds.push(a.id);
-      applyAchievementBonus(a);
-      SFX.achievement();
-      toast(`🏅 Achievement Unlocked: ${a.name}! (${a.reward})`, 'gold');
-      const card = document.querySelector(`[data-achievement="${a.id}"]`);
-      if (card) { card.classList.add('achieved', 'ach-unlock-flash'); }
+  function chooseCandidates(state) {
+    if (getOpenHeadcount(state) <= 0 || state.weeklyFlags.freezeHiring) {
+      state.candidateSlate = [];
+      state.selectedCandidateId = null;
+      return;
     }
-    updateAchievementProgress(a, current);
-  });
-  document.getElementById('skill-points-label').textContent = `${S.skillPoints} SP available`;
-}
-
-function applyAchievementBonus(a) {
-  const b = a.bonus;
-  const am = S.achMods;
-  if (b.perClick)    am.perClick    += b.perClick;
-  if (b.perSec)      am.perSec      += b.perSec;
-  if (b.clickMult)   am.clickMult   += b.clickMult;
-  if (b.globalMult)  am.globalMult  += b.globalMult;
-  if (b.squadMult)   am.squadMult   += b.squadMult;
-  if (b.prestigeMult)am.prestigeMult+= b.prestigeMult;
-  if (b.skillPoints) { S.skillPoints += b.skillPoints; }
-}
-
-function reapplyAllAchievements() {
-  S.achMods = { perClick:0, perSec:0, clickMult:0, globalMult:0, squadMult:0, prestigeMult:0, skillPoints:0 };
-  S.achievedIds.forEach(id => {
-    const a = ACHIEVEMENTS.find(x => x.id === id);
-    if (a) applyAchievementBonus(a);
-  });
-}
-
-// ══════════════════════════════════════════════════════════════
-// CAREER / PRESTIGE
-// ══════════════════════════════════════════════════════════════
-function checkPromotionReady() {
-  const nextTier = CAREER[S.careerTier + 1];
-  const panel = document.getElementById('promotion-panel');
-  const titleEl = document.getElementById('promo-title');
-  const descEl = document.getElementById('promo-description');
-  const btnEl = document.getElementById('btn-promote');
-  if (!nextTier) {
-    panel.classList.add('hidden');
-    return;
-  }
-  const req = getCareerRequirement(nextTier);
-  const progress = req > 0 ? (S.lifetimeTickets / req) : 0;
-  if (S.lifetimeTickets >= req) {
-    panel.classList.remove('hidden');
-    titleEl.textContent = '🚀 Promotion Ready!';
-    descEl.textContent = `You survived long enough to be rewarded with more responsibility. Promote to ${nextTier.icon} ${nextTier.title} and gain ×${nextTier.prestigeBonus} permanent bonus. Tickets reset. Squad and upgrades stay.`;
-    btnEl.textContent = `Accept Promotion to ${nextTier.title}`;
-    btnEl.disabled = false;
-  } else if (progress >= 0.72) {
-    panel.classList.remove('hidden');
-    titleEl.textContent = '👀 Promotion Track';
-    descEl.textContent = `${fmt(req - S.lifetimeTickets)} tickets until ${nextTier.icon} ${nextTier.title}. Leadership can smell a promotion deck forming.`;
-    btnEl.textContent = 'Not Quite There Yet';
-    btnEl.disabled = true;
-  } else {
-    panel.classList.add('hidden');
-    btnEl.disabled = false;
-  }
-}
-
-function renderOfficeInterlude() {
-  const modal = document.getElementById('office-interlude-modal');
-  const list = document.getElementById('office-choice-list');
-  if (!modal || !list) return;
-
-  const picks = (S.officeDraftChoices || []).length ? S.officeDraftChoices : rollOfficeDraftChoices();
-  if (!picks.length) {
-    modal.classList.add('hidden');
-    return;
+    const used = usedPoolIds(state);
+    const pool = STAFF_POOL.filter((hero) => !used.has(hero.id));
+    state.candidateSlate = shuffle(pool).slice(0, SLATE_SIZE).map((hero) => buildStaff(hero, null));
+    state.selectedCandidateId = state.candidateSlate[0] ? state.candidateSlate[0].id : null;
   }
 
-  list.innerHTML = picks.map(id => {
-    const perk = OFFICE_UPGRADES.find(x => x.id === id);
-    if (!perk) return '';
-    return `
-      <button class="office-choice-card" data-office-perk="${perk.id}">
-        <span class="office-choice-icon">${perk.icon}</span>
-        <div class="office-choice-content">
-          <strong>${perk.name}</strong>
-          <span>${perk.desc}</span>
-          <small>${perk.effectText}</small>
-        </div>
-      </button>
-    `;
-  }).join('');
-
-  list.querySelectorAll('[data-office-perk]').forEach(btn => {
-    btn.addEventListener('click', () => chooseOfficePerk(btn.dataset.officePerk));
-  });
-
-  modal.classList.remove('hidden');
-}
-
-function chooseOfficePerk(perkId) {
-  if ((S.officePerksChosen || []).includes(perkId)) return;
-  const perk = OFFICE_UPGRADES.find(x => x.id === perkId);
-  if (!perk) return;
-
-  S.officePerksChosen = [...(S.officePerksChosen || []), perkId];
-  S.officeDraftChoices = [];
-  recalcOfficeMods();
-  document.getElementById('office-interlude-modal').classList.add('hidden');
-  toast(`${perk.icon} Office upgrade secured: ${perk.name}. ${perk.effectText}`, 'gold');
-  renderAll();
-}
-
-function doPromotion() {
-  const nextTier = CAREER[S.careerTier + 1];
-  if (!nextTier) return;
-  S.careerTier++;
-  S.prestiges++;
-  S.prestigeMultiplier = nextTier.prestigeBonus * (1 + S.achMods.prestigeMult + S.skillMods.prestigeMult - 1);
-  S.strikes = 0;
-  // Soft reset
-  S.tickets = 0;
-  S.lifetimeTickets = 0;
-  S.xp = 0;
-  S.level = 1;
-  S.skillPoints = Math.floor(S.prestiges * 2);
-  S.xpRequired = xpForLevel(1);
-  S.upgradeOwned = {};
-  S.basePerClick = 1;
-  S.basePerSec = 0;
-  reapplyAllSkills();
-  reapplyAllAchievements();
-  recalcOfficeMods();
-  SFX.promotion();
-  toast(`🚀 PROMOTED to ${nextTier.icon} ${nextTier.title}! Bonus: ×${nextTier.prestigeBonus}`, 'gold');
-  toast(`📣 New title, same chaos. Enjoy your fresh badge and expanded blast radius.`, 'gold');
-  if (S.careerTier === CAREER.length - 1) {
-    toast('🏆 YOU ARE THE CIO! The ultimate achievement unlocked!', 'gold');
+  function getWeakestMetric(state = S) {
+    const entries = [
+      ['backlog', 100 - state.backlog],
+      ['morale', state.morale],
+      ['budgetHealth', state.budgetHealth],
+      ['compliance', state.compliance],
+      ['politicalCapital', state.politicalCapital],
+    ].sort((a, b) => a[1] - b[1]);
+    return entries[0][0];
   }
-  document.getElementById('promotion-panel').classList.add('hidden');
-  if ((S.officePerksChosen || []).length < OFFICE_UPGRADES.length) {
-    rollOfficeDraftChoices();
-    renderOfficeInterlude();
+
+  function metricCategory(state = S) {
+    const weak = getWeakestMetric(state);
+    if (weak === 'backlog') return pick(['incident', 'boss']);
+    if (weak === 'budgetHealth') return 'finance';
+    if (weak === 'compliance') return 'audit';
+    if (weak === 'morale') return 'hr';
+    if (weak === 'politicalCapital') return pick(['boss', 'ai']);
+    return pick(['boss', 'finance', 'audit', 'vendor', 'hr', 'incident', 'ai']);
   }
-  renderAll();
-}
 
-function addStrike() {
-  S.strikes = (S.strikes || 0) + 1;
-  renderStats();
-  if (S.strikes >= 3) {
-    firePlayer();
-  } else {
-    toast(`⚠️ STRIKE ${S.strikes} / 3! Handle incidents or get fired!`, 'red');
-    SFX.error();
+  function applyEffects(effects = {}) {
+    Object.entries(effects).forEach(([key, value]) => {
+      if (key === 'actionPoints') return void (S.actionPoints = Math.max(0, S.actionPoints + value));
+      if (key === 'morale') {
+        shiftAllStaff('morale', value);
+        return void recomputeMorale();
+      }
+      if (key === 'backlog') S.backlog = clamp(S.backlog + value, 0, 100);
+      if (key === 'budgetHealth') S.budgetHealth = clamp(S.budgetHealth + value, 0, 100);
+      if (key === 'compliance') S.compliance = clamp(S.compliance + value, 0, 100);
+      if (key === 'politicalCapital') S.politicalCapital = clamp(S.politicalCapital + value, 0, 100);
+      if (key === 'narrativeDebt') S.narrativeDebt = clamp(S.narrativeDebt + value, 0, 100);
+      if (key === 'promotionPressure') S.promotionPressure = clamp(S.promotionPressure + value, 0, 100);
+    });
   }
-}
 
-function firePlayer() {
-  S.strikes = 0;
-  S.tickets = 0;
-  S.lifetimeTickets = 0;
-  S.xp = 0;
-  S.level = 1;
-  S.careerTier = 0;
-  S.skillPoints = Math.floor(S.prestiges * 2);
-  S.xpRequired = xpForLevel(1);
-  S.upgradeOwned = {};
-  S.heroState = {};
-  S.basePerClick = 1;
-  S.basePerSec = 0;
-  reapplyAllSkills();
-  reapplyAllAchievements();
-  SFX.error();
-  document.getElementById('fired-modal').classList.remove('hidden');
-  renderAll();
-}
-
-// ══════════════════════════════════════════════════════════════
-// INCIDENTS + DISPATCH SYSTEM
-// ══════════════════════════════════════════════════════════════
-let activeIncident = null;
-let incidentCountdown = null;
-
-function getIncidentSeverity(inc) {
-  if ((inc.rewardMult || 0) >= 4 || (inc.timeLimit || 999) <= 12) return { label: 'SEV-1', risk: 'Ignore this and you are asking for a strike.' };
-  if ((inc.rewardMult || 0) >= 2.5 || (inc.timeLimit || 999) <= 18) return { label: 'SEV-2', risk: 'High-pressure issue. Respond fast for the juicy reward.' };
-  return { label: 'SEV-3', risk: 'Manageable mess. Still not something to leave burning.' };
-}
-
-function getIncidentCommentary(inc) {
-  const pool = {
-    critical: [
-      'The executive chain is already forming an opinion and it is a bad one.',
-      'Somewhere, a VP has started typing in all caps.',
-      'This is the sort of outage that creates meetings for years.'
-    ],
-    security: [
-      'Security would like to remind everyone they warned about this exact thing.',
-      'Someone just said “containment” and the room got very quiet.',
-      'This one ends with either heroics or mandatory training.'
-    ],
-    database: [
-      'Finance can smell this problem from three floors away.',
-      'The database team is preparing a sermon on index hygiene.',
-      'If this goes badly, somebody is blaming the migration notes.'
-    ],
-    network: [
-      'Packets are fleeing the scene in terror.',
-      'Networking insists it is DNS until proven otherwise.',
-      'Several conference rooms are now spiritually disconnected.'
-    ],
-    devops: [
-      'A dashboard somewhere just became performance art.',
-      'This smells like automation with too much confidence.',
-      'There are far too many graphs involved in this disaster.'
-    ],
-    cloud: [
-      'The cloud remains someone else’s computer and somehow still your problem.',
-      'A finance analyst just refreshed the billing page and screamed softly.',
-      'Elastic scale has become elastic regret.'
-    ],
-    clerical: [
-      'This is petty, stupid, and somehow still career-limiting.',
-      'The queue has achieved sentience and it resents you personally.',
-      'Perfect. A low-glamour catastrophe.'
-    ],
-  };
-  const arr = pool[inc.category] || pool.clerical;
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function triggerIncident() {
-  if (activeIncident) return;
-  if (S.clockedOut && Math.random() < 0.75) return; // Most incidents defer while off shift
-  const inc = INCIDENTS[Math.floor(Math.random() * INCIDENTS.length)];
-  activeIncident = { ...inc, timeLeft: inc.timeLimit };
-  const banner = document.getElementById('incident-banner');
-  const sev = getIncidentSeverity(inc);
-  const previewReward = Math.max(Math.floor(calcPerSec() * inc.rewardMult * 10 * getIncidentRewardMultiplier()), 500);
-  const commentary = getIncidentCommentary(inc);
-  document.getElementById('incident-icon').textContent = inc.icon;
-  document.getElementById('incident-severity').textContent = sev.label;
-  document.getElementById('incident-title').textContent = inc.title;
-  document.getElementById('incident-text').textContent  = `${inc.text} ${commentary}`;
-  document.getElementById('incident-meta').textContent = `${sev.risk} Reward preview: ~${fmt(previewReward)} tickets.`;
-  document.getElementById('incident-timer').textContent = `${inc.timeLimit}s`;
-  banner.classList.remove('hidden');
-  SFX.incident();
-  if (!S.tutorialFirstIncidentSeen) {
-    S.tutorialFirstIncidentSeen = true;
-    toast('🚨 First incident! Move now or let HR start a scrapbook.', 'red');
-    renderOnboarding();
+  function enqueueConsequence(id) {
+    const template = CONSEQUENCES[id];
+    if (template) S.pendingConsequences.push({ id, weeksLeft: template.delayWeeks });
   }
-  incidentCountdown = setInterval(() => {
-    if (!activeIncident) { clearInterval(incidentCountdown); return; }
-    activeIncident.timeLeft--;
-    document.getElementById('incident-timer').textContent = `${activeIncident.timeLeft}s`;
-    const cn = document.getElementById('dispatch-countdown-num');
-    if (cn) cn.textContent = activeIncident.timeLeft;
-    if (activeIncident.timeLeft <= 0) dismissIncident(false);
-  }, 1000);
-}
 
-function dismissIncident(resolved, silently = false) {
-  clearInterval(incidentCountdown);
-  document.getElementById('incident-banner').classList.add('hidden');
-  closeDispatchModal();
-  if (!resolved && !silently) {
-    toast('⚠️ Incident abandoned! That is a strike!', 'red');
-    addStrike();
-  } else if (!resolved) {
-    // Silent dismiss
+  function logWeek(text, tone = 'neutral') {
+    S.weekLog.unshift({ week: S.week, text, tone });
+    S.weekLog = S.weekLog.slice(0, 12);
   }
-  activeIncident = null;
 
-  // Roll for strike recovery after each incident cycle
-  rollStrikeRecovery();
-}
-
-// ── Dispatch Modal ──────────────────────────────────────────
-function calcSkillMatch(hero, incident) {
-  const reqSkills = incident.requiredSkills || [];
-  if (reqSkills.length === 0) return { label: '✅ All Capable', cls: 'all', mult: 1.5 };
-  const matches = (hero.skills || []).filter(s => reqSkills.includes(s)).length;
-  if (matches >= 2) return { label: '🎯 Perfect Match', cls: 'perfect', mult: 3.0 };
-  if (matches === 1) return { label: '👍 Good Match',   cls: 'good',    mult: 2.0 };
-  return                     { label: '⚠️ Out of Element', cls: 'weak', mult: 0.6 };
-}
-
-function getDispatchCardData(hero, incident) {
-  const hs = S.heroState[hero.id] || { status: 'Active', morale: 100, level: 1 };
-  const match = calcSkillMatch(hero, incident);
-  const isActive = hs.status === 'Active';
-  const rewardBase = Math.max(calcPerSec() * incident.rewardMult * 10 * getIncidentRewardMultiplier(), 500);
-  const projectedReward = Math.floor(rewardBase * match.mult);
-  const morale = hs.morale ?? 100;
-  const level = hs.level ?? 1;
-  const score = (isActive ? 1000 : 0) + (match.mult * 100) + (level * 6) + (morale * 0.4) + ((hero.baseCps || 0) * 5);
-
-  return {
-    hero,
-    hs,
-    match,
-    isActive,
-    projectedReward,
-    score,
-    recommendation: isActive
-      ? `${hero.emoji} ${hero.name} is your best available ${match.label.replace(/^[^ ]+\s*/, '').toLowerCase()} for ~${fmt(projectedReward)} tickets.`
-      : `${hero.emoji} ${hero.name} would be ideal, but they are currently ${hs.status.toLowerCase()}.`
-  };
-}
-
-function renderDispatchBriefing(incident, heroCards) {
-  const sev = getIncidentSeverity(incident);
-  const chipsEl = document.getElementById('dispatch-briefing-chips');
-  const recommendationEl = document.getElementById('dispatch-recommendation-text');
-  const previewReward = Math.max(Math.floor(calcPerSec() * incident.rewardMult * 10 * getIncidentRewardMultiplier()), 500);
-  const timePressure = incident.timeLeft <= 10 ? 'Immediate' : incident.timeLeft <= 18 ? 'High' : 'Manageable';
-
-  chipsEl.innerHTML = [
-    `<span class="dispatch-chip severity-${sev.label.toLowerCase()}">${sev.label}</span>`,
-    `<span class="dispatch-chip">⏱️ ${incident.timeLeft}s to contain</span>`,
-    `<span class="dispatch-chip">🔥 ${timePressure} pressure</span>`,
-    `<span class="dispatch-chip">💰 ~${fmt(previewReward)} base reward</span>`
-  ].join('');
-
-  const bestAvailable = heroCards.find(card => card.isActive);
-  if (bestAvailable) {
-    recommendationEl.textContent = bestAvailable.recommendation;
-  } else if (heroCards.length) {
-    recommendationEl.textContent = 'Your squad is unavailable. Handle this yourself before HR turns the postmortem into performance art.';
-  } else {
-    recommendationEl.textContent = 'No squad yet. This is a solo panic attack. Hit Handle Myself and go earn your paycheck.';
+  function addModifier(text) {
+    S.weeklyModifiers.unshift(text);
+    S.weeklyModifiers = S.weeklyModifiers.slice(0, 8);
   }
-}
 
-function openDispatchModal() {
-  if (!activeIncident) {
-    toast('No active incident. A rare moment of peace.', 'green');
-    return;
+  function applyConsequence(entry) {
+    const template = CONSEQUENCES[entry.id];
+    if (!template) return;
+    applyEffects(template.effects);
+    if (entry.id === 'burnout_wave') {
+      shuffle(S.staffState).slice(0, 2).forEach((staff) => {
+        staff.burnout = clamp(staff.burnout + 16, 0, 100);
+        staff.morale = clamp(staff.morale - 8, 0, 100);
+      });
+      recomputeMorale();
+    }
+    if (entry.id === 'canceled_one_on_ones') {
+      const target = pick(S.staffState.filter((staff) => !staff.isSupervisor));
+      if (target && !target.flags.includes('flight-risk')) target.flags.push('flight-risk');
+    }
+    if (entry.id === 'shadow_ai_blowback') {
+      const target = pick(S.staffState);
+      if (target && !target.flags.includes('hidden-problem')) target.flags.push('hidden-problem');
+    }
+    addModifier(template.log);
+    logWeek(template.log, 'risk');
   }
-  const inc = activeIncident;
 
-  // Populate header
-  document.getElementById('dispatch-inc-icon').textContent  = inc.icon;
-  document.getElementById('dispatch-inc-title').textContent = inc.title;
-  document.getElementById('dispatch-inc-text').textContent  = inc.text;
-  document.getElementById('dispatch-countdown-num').textContent = inc.timeLeft;
+  function processConsequences() {
+    const keep = [];
+    S.pendingConsequences.forEach((entry) => {
+      entry.weeksLeft -= 1;
+      if (entry.weeksLeft <= 0) applyConsequence(entry);
+      else keep.push(entry);
+    });
+    S.pendingConsequences = keep;
+  }
 
-  // Required skills
-  const reqEl = document.getElementById('dispatch-required-skills');
-  reqEl.innerHTML = (inc.requiredSkills || []).length
-    ? (inc.requiredSkills).map(s => `<span class="skill-badge match">${s}</span>`).join('')
-    : '<span style="color:var(--text-muted);font-size:0.8rem">Any hero can handle this</span>';
+  function makeEvent(category, usedIds = new Set()) {
+    const pool = (EVENT_TEMPLATES[category] || []).filter((item) => !usedIds.has(item.id));
+    if (!pool.length) return null;
+    const template = pick(pool);
+    const event = {
+      id: makeId(template.id),
+      templateId: template.id,
+      category,
+      title: template.title,
+      summary: template.summary,
+      mandatory: !!template.mandatory,
+      resolved: false,
+      chosenLabel: '',
+      choices: template.choices || [],
+      autoEffects: template.autoEffects || null,
+    };
+    if (category === 'news') {
+      event.resolved = true;
+      event.chosenLabel = 'Ambient nonsense';
+      applyEffects(event.autoEffects || {});
+      addModifier(`${event.title}: ${event.summary}`);
+      logWeek(event.title, 'news');
+    }
+    return event;
+  }
 
-  // Hero list
-  const heroListEl = document.getElementById('dispatch-hero-list');
-  heroListEl.innerHTML = '';
-  const ownedHeroes = HEROES.filter(h => S.heroState[h.id]?.owned);
-  const heroCards = ownedHeroes
-    .map(hero => getDispatchCardData(hero, inc))
-    .sort((a, b) => b.score - a.score);
+  function buildPoliticalMoves() {
+    const ids = ['tell_truth', 'spin_boss'];
+    if (S.backlog > 58) ids.push(pick(['hide_backlog', 'midnight_oil']));
+    else if (getOpenHeadcount() > 0) ids.push('freeze_hiring');
+    else if (S.compliance > 35) ids.push('skip_time_tracking');
+    else ids.push(pick(['cancel_one_on_ones', 'blame_vendor']));
+    if (S.weeklyInbox.some((event) => event.category === 'vendor')) ids.push('blame_vendor');
+    return [...new Set(ids)].slice(0, 4);
+  }
 
-  renderDispatchBriefing(inc, heroCards);
+  function buildBossState() {
+    const boss = BOSS_ARCHETYPES[Math.min(BOSS_ARCHETYPES.length - 1, Math.floor(S.careerTier / 2))] || BOSS_ARCHETYPES[0];
+    const moodScore = computePromotionScore() - Math.round(S.narrativeDebt * 0.15) - (S.pipStatus ? 10 : 0) - S.warningCount * 5;
+    return {
+      archetypeId: boss.id,
+      mood: moodScore >= 70 ? boss.moods[0] : moodScore >= 45 ? boss.moods[1] : boss.moods[2],
+      ask: pick(boss.asks),
+      needsExplanation: S.backlog > 68 || S.narrativeDebt > 55 || S.warningCount > 0 || S.pipStatus,
+      availableMoves: buildPoliticalMoves(),
+    };
+  }
 
-  if (ownedHeroes.length === 0) {
-    heroListEl.innerHTML = '<div class="dispatch-no-heroes">No heroes recruited yet — handle it yourself or recruit from the Squad tab first!</div>';
-  } else {
-    heroCards.forEach((card, index) => {
-      try {
-        const { hero, hs, match, isActive, projectedReward } = card;
-        const item = document.createElement('div');
-        item.className = `dispatch-hero-item ${!isActive ? 'disabled' : ''}${index === 0 ? ' recommended' : ''}`;
-        const skillBadges = (hero.skills || []).map(s => {
-          const isMatch = (inc.requiredSkills || []).includes(s);
-          return `<span class="skill-badge${isMatch ? ' match' : ''}">${s}</span>`;
-        }).join('');
-        const statusText = !isActive ? `<span class="dispatch-status-out">${hs.status}</span>` : '';
-        const recommendationBadge = index === 0 ? '<span class="dispatch-recommended-badge">TOP PICK</span>' : '';
-        const detailText = isActive
-          ? `Projected reward: ~${fmt(projectedReward)} tickets • Morale ${hs.morale ?? 100}%`
-          : `Unavailable right now • Morale ${hs.morale ?? 100}%`;
+  function generateWeeklyInbox() {
+    const usedIds = new Set();
+    const inbox = [];
+    const first = makeEvent(metricCategory(), usedIds);
+    if (first) {
+      usedIds.add(first.templateId);
+      inbox.push(first);
+    }
+    const secondCategory = S.narrativeDebt > 60 || S.warningCount > 0 || S.backlog > 72 ? (S.compliance < 45 ? 'audit' : pick(['boss', 'finance', 'vendor', 'hr'])) : pick(['vendor', 'hr', 'ai', 'finance', 'theater']);
+    const second = makeEvent(secondCategory, usedIds);
+    if (second) {
+      usedIds.add(second.templateId);
+      inbox.push(second);
+    }
+    const news = makeEvent('news', usedIds);
+    if (news) inbox.push(news);
+    if (Math.random() < 0.45) {
+      const optional = makeEvent(pick(['theater', 'ai']), usedIds);
+      if (optional) inbox.push(optional);
+    }
+    return inbox;
+  }
 
-        item.innerHTML = `
-          <span class="dispatch-hero-emoji">${hero.emoji}</span>
-          <div class="dispatch-hero-info">
-            <div class="dispatch-hero-name">${hero.name} ${statusText} ${recommendationBadge}</div>
-            <div class="dispatch-hero-role">${hero.role}</div>
-            <div class="dispatch-skills-row">${skillBadges}</div>
-            <div class="dispatch-hero-detail">${detailText}</div>
-          </div>
-          <div class="dispatch-match-label ${match.cls}">${match.label}</div>
-          <button class="btn-dispatch-hero" data-hero="${hero.id}" ${!isActive ? 'disabled' : ''}>
-            ${!isActive ? 'Out' : 'Dispatch'}
-          </button>
-        `;
-        if (isActive) {
-          item.querySelector('.btn-dispatch-hero').addEventListener('click', () => dispatchHeroToIncident(hero.id));
-        }
-        heroListEl.appendChild(item);
-      } catch (err) {
-        console.error('dispatch hero render failed', card?.hero?.id, err);
+  function chooseManagerForHire() {
+    const supervisors = S.staffState.filter((staff) => staff.isSupervisor);
+    if (!supervisors.length) return 'player';
+    const capacity = getSupervisorCapacity();
+    const managerLoad = [{ id: 'player', load: directReports('player').length }].concat(supervisors.map((staff) => ({ id: staff.id, load: directReports(staff.id).length }))).sort((a, b) => a.load - b.load);
+    const open = managerLoad.find((entry) => entry.id === 'player' || entry.load < capacity);
+    return open ? open.id : managerLoad[0].id;
+  }
+
+  function rebalanceReports() {
+    const supervisors = S.staffState.filter((staff) => staff.isSupervisor);
+    if (!supervisors.length) {
+      S.staffState.forEach((staff) => { if (!staff.isSupervisor) staff.managerId = 'player'; });
+      return;
+    }
+    const capacity = getSupervisorCapacity();
+    const managed = supervisors.map((supervisor) => ({ id: supervisor.id, load: 0 }));
+    S.staffState.filter((staff) => !staff.isSupervisor).forEach((staff) => {
+      const preferred = managed.find((entry) => entry.id === staff.managerId && entry.load < capacity);
+      if (preferred) return void (preferred.load += 1);
+      managed.sort((a, b) => a.load - b.load);
+      if (directReports('player').length < capacity) staff.managerId = 'player';
+      else {
+        staff.managerId = managed[0].id;
+        managed[0].load += 1;
       }
     });
   }
 
-  document.getElementById('dispatch-modal').classList.remove('hidden');
-}
-
-function closeDispatchModal() {
-  document.getElementById('dispatch-modal').classList.add('hidden');
-}
-
-function dispatchHeroToIncident(heroId) {
-  if (!activeIncident) return;
-  const inc   = activeIncident;
-  const hero  = HEROES.find(h => h.id === heroId);
-  if (!hero) return;
-
-  const match      = calcSkillMatch(hero, inc);
-  const rewardBase = Math.max(calcPerSec() * inc.rewardMult * 10 * getIncidentRewardMultiplier(), 500);
-  const reward     = Math.floor(rewardBase * match.mult);
-
-  dismissIncident(false, true); // clears banner/modal/timer safely
-  S.dispatches++;
-  
-  // Impact morale and track activity
-  const hs = S.heroState[heroId];
-  hs.daysSinceLastTask = 0; // Reset boredom
-
-  if (match.cls === 'weak') {
-    hs.morale = Math.max(0, (hs.morale || 100) - 15);
-    toast(`📉 ${hero.name} is frustrated by the unsuitable task!`, 'red');
-  } else {
-    hs.morale = Math.min(100, (hs.morale || 100) + 5);
+  function prepareWeek(initial = false) {
+    processConsequences();
+    S.actionPoints = currentCareer().weeklyAP;
+    S.weeklyActionsTaken = [];
+    S.weeklyModifiers = [];
+    S.weeklyFlags = { usedPoliticalMove: false, freezeHiring: false, reviewRequested: false, midnightOil: false };
+    chooseCandidates(S);
+    S.weeklyInbox = generateWeeklyInbox();
+    S.bossState = buildBossState();
+    recomputeMorale();
+    if (!S.selectedStaffId || !staffById(S.selectedStaffId)) S.selectedStaffId = S.staffState[0] ? S.staffState[0].id : null;
+    if (!S.selectedCandidateId || !candidateById(S.selectedCandidateId)) S.selectedCandidateId = S.candidateSlate[0] ? S.candidateSlate[0].id : null;
+    if (initial) logWeek('You inherited a service desk pod that works just well enough to fail upward or implode.', 'neutral');
   }
 
-  toast(`📡 ${hero.emoji} ${hero.name} dispatched! Resolving...`, 'gold');
-
-  const resolveTime = 2000 + Math.random() * 2000;
-  setTimeout(() => {
-    gainTickets(reward);
-    gainXp(calcXpGain(reward));
-    S.incidentsResolved++;
-    if (!S.tutorialFirstIncidentResolved) {
-      S.tutorialFirstIncidentResolved = true;
-      toast('🛡️ Incident contained. Excellent. Pretend this level of competence is sustainable.', 'gold');
-      renderOnboarding();
-    }
-    toast(`✅ ${hero.name}: ${match.label} — +${fmt(reward)} tickets!`, 'green');
-    checkAchievements();
-  }, resolveTime);
-}
-
-// ── Handle Myself → Minigame ───────────────────────────────────
-let mgState = null;
-
-function handleSelf() {
-  if (!activeIncident) return;
-  closeDispatchModal();
-  openMinigame(activeIncident);
-}
-
-function openMinigame(inc) {
-  // Dismiss banner & pause incident timer — keep activeIncident for reward
-  clearInterval(incidentCountdown);
-  document.getElementById('incident-banner').classList.add('hidden');
-
-  const clicksNeeded = Math.max(15, Math.min(40, Math.round(inc.rewardMult * 3.5)));
-  const timeLimit    = Math.min(inc.timeLeft, 15);
-  const baseReward   = Math.max(calcPerSec() * inc.rewardMult * 6 * getIncidentRewardMultiplier(), 300);
-
-  mgState = { inc, clicksNeeded, timeLimit, timeLeft: timeLimit,
-              clicksMade: 0, progress: 0, baseReward, done: false, timer: null };
-
-  // Populate
-  document.getElementById('minigame-icon').textContent    = inc.icon;
-  document.getElementById('minigame-title').textContent   = inc.title;
-  document.getElementById('minigame-subtitle').textContent =
-    `Mash to resolve — need ${clicksNeeded} clicks before time runs out!`;
-  document.getElementById('minigame-timer').textContent   = `${timeLimit}s`;
-  document.getElementById('minigame-bar').style.width     = '0%';
-  document.getElementById('minigame-bar-label').textContent = '0%';
-  document.getElementById('minigame-click-counter').innerHTML =
-    `Clicks: <strong>0 / ${clicksNeeded}</strong>`;
-  document.getElementById('minigame-reward-preview').innerHTML =
-    `Reward: <strong>${fmt(Math.floor(baseReward * 0.5))}–${fmt(Math.floor(baseReward * 2))} tickets</strong>`;
-  document.getElementById('btn-minigame-resolve').classList.add('hidden');
-  document.getElementById('minigame-active').classList.remove('hidden');
-  document.getElementById('minigame-result').classList.add('hidden');
-  document.getElementById('minigame-panel').classList.remove('urgent');
-  document.getElementById('minigame-timer').classList.remove('urgent');
-  document.getElementById('btn-minigame-click').classList.remove('urgent');
-  document.getElementById('minigame-bar').classList.remove('urgent');
-  document.getElementById('minigame-modal').classList.remove('hidden');
-
-  mgState.timer = setInterval(() => {
-    if (mgState.done) return;
-    mgState.timeLeft--;
-    document.getElementById('minigame-timer').textContent = `${mgState.timeLeft}s`;
-    if (mgState.timeLeft <= 5) {
-      document.getElementById('minigame-panel').classList.add('urgent');
-      document.getElementById('minigame-timer').classList.add('urgent');
-      document.getElementById('btn-minigame-click').classList.add('urgent');
-      document.getElementById('minigame-bar').classList.add('urgent');
-    }
-    if (mgState.timeLeft <= 0) endMinigame(false);
-  }, 1000);
-}
-
-function onMinigameClick() {
-  if (!mgState || mgState.done) return;
-  mgState.clicksMade++;
-  mgState.progress = Math.min(mgState.clicksMade / mgState.clicksNeeded, 1);
-  SFX.minigameClick();
-  const pct = Math.round(mgState.progress * 100);
-  document.getElementById('minigame-bar').style.width     = pct + '%';
-  document.getElementById('minigame-bar-label').textContent = pct + '%';
-  document.getElementById('minigame-click-counter').innerHTML =
-    `Clicks: <strong>${mgState.clicksMade} / ${mgState.clicksNeeded}</strong>`;
-  const previewReward = Math.floor(mgState.baseReward * (0.5 + mgState.progress * 1.5));
-  document.getElementById('minigame-reward-preview').innerHTML =
-    `Current Reward: <strong>${fmt(previewReward)} tickets</strong>`;
-  if (mgState.progress >= 1) {
-    // Do not reveal a new clickable reward button under the player's cursor.
-    // High-speed clicking was causing accidental follow-up clicks in the same spot.
-    endMinigame(true);
-  }
-}
-
-function endMinigame(success) {
-  if (!mgState) return;
-  mgState.done = true;
-  clearInterval(mgState.timer);
-  const mult   = success ? (0.5 + mgState.progress * 1.8) : (mgState.progress * 0.5);
-  const reward = Math.max(Math.floor(mgState.baseReward * mult), success ? 50 : 0);
-
-  document.getElementById('minigame-active').classList.add('hidden');
-  document.getElementById('minigame-result').classList.remove('hidden');
-  const titleEl = document.getElementById('minigame-result-title');
-  const emojiEl = document.getElementById('minigame-result-emoji');
-
-  if (success || mgState.progress >= 1) {
-    emojiEl.textContent = '🎉'; titleEl.textContent = 'INCIDENT RESOLVED!';
-    titleEl.className = 'minigame-result-title success';
-    document.getElementById('minigame-result-reward').textContent = `+${fmt(reward)} tickets earned!`;
-    SFX.minigameWin();
-  } else if (mgState.progress >= 0.5) {
-    emojiEl.textContent = '😅'; titleEl.textContent = 'Partially Resolved';
-    titleEl.className = 'minigame-result-title success';
-    document.getElementById('minigame-result-reward').textContent =
-      `Salvaged +${fmt(reward)} tickets (${Math.round(mgState.progress*100)}% complete)`;
-    SFX.minigameWin();
-  } else {
-    emojiEl.textContent = '💀'; titleEl.textContent = 'INCIDENT FAILED!';
-    titleEl.className = 'minigame-result-title failed';
-    document.getElementById('minigame-result-reward').textContent =
-      `Only ${Math.round(mgState.progress*100)}% resolved. You gained a STRIKE.`;
-    SFX.minigameFail();
-    addStrike();
+  function buildFreshState(meta = {}) {
+    const starters = shuffle(STAFF_POOL).slice(0, START_TEAM).map((hero) => buildStaff(hero, 'player'));
+    return {
+      saveVersion: SAVE_KEY,
+      week: 1,
+      careerTier: 0,
+      actionPoints: CAREER[0].weeklyAP,
+      backlog: 52,
+      morale: 62,
+      budgetHealth: 56,
+      compliance: 46,
+      politicalCapital: meta.politicalCapital ?? 34,
+      narrativeDebt: meta.narrativeDebt ?? 8,
+      promotionPressure: 0,
+      warningCount: 0,
+      pipStatus: false,
+      demotions: 0,
+      firings: meta.firings || 0,
+      lifetimeEarnings: meta.lifetimeEarnings || 0,
+      staffState: starters,
+      candidateSlate: [],
+      bossState: { archetypeId: BOSS_ARCHETYPES[0].id, mood: '', ask: '', needsExplanation: false, availableMoves: [] },
+      weeklyInbox: [],
+      weeklyActionsTaken: [],
+      weeklyModifiers: [],
+      pendingConsequences: meta.pendingConsequences || [],
+      selectedStaffId: starters[0] ? starters[0].id : null,
+      selectedCandidateId: null,
+      weekLog: meta.weekLog || [],
+      weeklyFlags: {},
+      lastFiredReason: '',
+      isFired: false,
+    };
   }
 
-  if (reward > 0) { gainTickets(reward); gainXp(calcXpGain(reward)); }
-  S.incidentsResolved++;
-  activeIncident = null;
-  mgState = null;
-  checkAchievements();
-}
-
-function closeMinigame() {
-  if (mgState && !mgState.done) { clearInterval(mgState.timer); mgState = null; }
-  activeIncident = null;
-  document.getElementById('minigame-modal').classList.add('hidden');
-}
-
-// ── Schedule incidents every 30-90 seconds ──
-function scheduleNextIncident() {
-  const delay = 30_000 + Math.random() * 60_000;
-  setTimeout(() => { triggerIncident(); scheduleNextIncident(); }, delay);
-}
-
-// ══════════════════════════════════════════════════════════════
-// OFFLINE INCOME
-// ══════════════════════════════════════════════════════════════
-function calcOfflineIncome() {
-  const now = Date.now();
-  const elapsed = (now - (S.lastTick || now)) / 1000; // seconds
-  const maxSeconds = S.skillMods.offlineHours * 3600;
-  const credited = Math.min(elapsed, maxSeconds);
-  if (credited > 60) {
-    const income = calcPerSec() * credited * 0.5; // 50% efficiency offline
-    gainTickets(income);
-    toast(`💤 Welcome back! Earned ${fmt(income)} tickets while away.`, 'gold');
+  function saveGame(label = 'Saved') {
+    if (!S) return;
+    localStorage.setItem(SAVE_KEY, JSON.stringify(S));
+    const indicator = document.getElementById('save-indicator');
+    if (!indicator) return;
+    indicator.textContent = label;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { indicator.textContent = 'Saved'; }, 1500);
   }
-  S.lastTick = now;
-}
 
-// ══════════════════════════════════════════════════════════════
-// RENDER
-// ══════════════════════════════════════════════════════════════
-function renderStats() {
-  const ps = calcPerSec();
-  const pc = calcPerClick();
-  document.getElementById('tickets-display').textContent  = fmt(S.tickets);
-  const diffDisplay = document.getElementById('difficulty-display');
-  if (diffDisplay) diffDisplay.textContent = getDifficulty().name;
-  const shiftBtn = document.getElementById('btn-clock-toggle');
-  const shiftStatus = document.getElementById('shift-status');
-  const clickBtn = document.getElementById('main-clicker');
-  const rested = Date.now() < (S.restedBuffUntil || 0);
-  if (shiftBtn && shiftStatus && clickBtn) {
-    shiftBtn.textContent = S.clockedOut ? '🟢 Clock In' : '🕒 Clock Out';
-    shiftBtn.classList.toggle('clocked-out', S.clockedOut);
-    shiftStatus.textContent = S.clockedOut ? 'Off Shift • squad running at 60%' : (rested ? 'On Shift • rested bonus active' : 'On Shift');
-    shiftStatus.classList.toggle('rested', rested && !S.clockedOut);
-    clickBtn.disabled = S.clockedOut;
-    clickBtn.classList.toggle('is-disabled', S.clockedOut);
-  }
-  document.getElementById('lifetime-display').textContent = fmt(S.lifetimeTickets);
-  document.getElementById('per-click-display').textContent= fmtDecimal(pc);
-  document.getElementById('per-sec-display').textContent  = fmtDecimal(ps);
-  document.getElementById('per-min-display').textContent  = fmtDecimal(ps * 60);
-  document.getElementById('prestige-display').textContent = S.prestiges;
-  document.getElementById('prestige-bonus-display').textContent = `×${S.prestigeMultiplier.toFixed(2)}`;
-  const officeRow = document.getElementById('office-upgrades-row');
-  const officeLabel = document.getElementById('office-upgrades-display');
-  if (officeRow && officeLabel) {
-    officeRow.style.display = (S.officePerksChosen || []).length > 0 ? 'flex' : 'none';
-    officeLabel.textContent = `${(S.officePerksChosen || []).length} permanent`;
-  }
-  
-  // Day display (new)
-  const dayEl = document.getElementById('game-day-label');
-  if (dayEl) dayEl.textContent = `Day ${S.gameDay}`;
-
-  // Strikes display
-  const strikesRow = document.getElementById('strikes-row');
-  if (strikesRow) {
-    if (S.strikes > 0) {
-      strikesRow.style.display = 'flex';
-      document.getElementById('strikes-display').textContent = `${S.strikes} / 3`;
-    } else {
-      strikesRow.style.display = 'none';
-    }
-  }
-  
-  document.getElementById('click-power-label').textContent = `+${fmtDecimal(pc)} ticket${pc !== 1 ? 's' : ''}`;
-
-  // Career progress bar
-  const tier = CAREER[S.careerTier];
-  const nextTier = CAREER[S.careerTier + 1];
-  if (nextTier) {
-    const pct = Math.min(S.lifetimeTickets / nextTier.xpRequired * 100, 100);
-    document.getElementById('career-progress-bar').style.width = pct + '%';
-  } else {
-    document.getElementById('career-progress-bar').style.width = '100%';
-  }
-  document.getElementById('career-title').textContent = `${tier.icon} ${tier.title}`;
-}
-
-function renderXpBar() {
-  const pct = Math.min(S.xp / S.xpRequired * 100, 100);
-  document.getElementById('xp-bar').style.width = pct + '%';
-  document.getElementById('xp-label').textContent = `${fmt(S.xp)} / ${fmt(S.xpRequired)} XP`;
-  document.getElementById('hero-level').textContent = S.level;
-}
-
-function updateComboUI() {
-  const el = document.getElementById('combo-meter');
-  if (S.combo <= 1) {
-    el.classList.add('hidden');
-  } else {
-    el.classList.remove('hidden');
-    document.getElementById('combo-count').textContent = `×${S.combo}`;
-  }
-}
-
-function renderUpgrades() {
-  const container = document.getElementById('upgrades-list');
-  container.innerHTML = '';
-  UPGRADES.forEach(u => {
-    const owned = S.upgradeOwned[u.id] || 0;
-    const cost  = upgradeCost(u);
-    const canAfford = S.tickets >= cost;
-    const div = document.createElement('div');
-    div.className = 'upgrade-card';
-    div.dataset.upgrade = u.id;
-    const bonusTags = [];
-    if (u.perClickBonus) bonusTags.push(`<span class="upgrade-tag">+${u.perClickBonus} /click</span>`);
-    if (u.perSecBonus)   bonusTags.push(`<span class="upgrade-tag green">+${fmtDecimal(u.perSecBonus)} /sec</span>`);
-    div.innerHTML = `
-      <span class="upgrade-icon">${u.icon}</span>
-      <div class="upgrade-info">
-        <div class="upgrade-name">${u.name}</div>
-        <div class="upgrade-desc">${u.desc}</div>
-        <div class="upgrade-stats">${bonusTags.join('')}</div>
-        <div class="upgrade-owned">Owned: ${owned}</div>
-      </div>
-      <button class="btn-buy" ${canAfford ? '' : 'disabled'}>${fmt(cost)} 🎫</button>
-    `;
-    div.querySelector('.btn-buy').addEventListener('click', () => buyUpgrade(u.id));
-    container.appendChild(div);
-  });
-}
-
-function renderSquad() {
-  const rosterEl   = document.getElementById('squad-roster');
-  const recruitEl  = document.getElementById('recruit-roster');
-  rosterEl.innerHTML  = '';
-  recruitEl.innerHTML = '';
-
-  HEROES.forEach(h => {
-    const hs = S.heroState[h.id];
-    if (hs && hs.owned) {
-      const card = buildHeroCard(h, hs, true);
-      rosterEl.appendChild(card);
-    }
-  });
-
-  S.applicantPool.forEach(id => {
-    const h = HEROES.find(x => x.id === id);
-    if (!h) return;
-    const card = buildHeroCard(h, null, false);
-    recruitEl.appendChild(card);
-  });
-
-  if (rosterEl.children.length === 0) {
-    rosterEl.innerHTML = '<p style="color:var(--text-muted);font-size:0.88rem;">No heroes recruited yet. Hire from the Available Recruits below!</p>';
-  }
-}
-
-function buildHeroCard(h, hs, owned) {
-  const card = document.createElement('div');
-  card.className = `hero-card ${h.rarity}`;
-  card.dataset.hero = h.id;
-
-  const rarityColors = { common:'#9ea5d1', uncommon:'#4ade80', rare:'#3b82f6', epic:'#a78bfa', legendary:'#ffc94b' };
-  const rarityColor  = rarityColors[h.rarity] || '#fff';
-
-  // Skill badges on owned hero cards
-  if (owned) {
-    const lvl = hs.level;
-    const lvlUpCost = getHeroLevelCost(h, lvl);
-    const trainCost = 2500 * ((h.skills || []).length + 1);
-    const cpsContrib = fmtDecimal(h.baseCps * (1 + (lvl - 1) * 0.25));
-    const skillBadges = (h.skills || []).map(s => `<span class="skill-badge">${s}</span>`).join('');
-    
-    if (hs.morale === undefined) hs.morale = 100;
-    const moraleColor = hs.morale > 70 ? 'var(--green)' : hs.morale > 30 ? 'var(--gold)' : 'var(--red)';
-    const statusClass = hs.status === 'Active' ? 'status-active' : 'status-out';
-    const hintLevel = hs.badHire ? (hs.badHireHintLevel || 0) : 0;
-    const badHireHint = hs.badHire ? `<div class="bad-hire-hint hint-${hintLevel}">${hintLevel === 0 ? '😬 Slightly off vibes.' : hintLevel === 1 ? '🤨 Talks in buzzwords. Output not found.' : hintLevel === 2 ? '🚩 Team morale dropping around this one.' : '☠️ Confirmed bad hire. Act accordingly.'}</div>` : '';
-
-    card.innerHTML = `
-      <div class="hero-card-top">
-        <span class="hero-emoji">${h.emoji}</span>
-        <div class="hero-meta">
-          <div class="hero-card-name">${h.name} <span class="hero-status-pill ${statusClass}">${hs.status}</span></div>
-          <div class="hero-card-role">${h.role}</div>
-          <div class="hero-card-rarity" style="color:${rarityColor}">${h.rarity.toUpperCase()}</div>
-        </div>
-      </div>
-      <div class="hero-skills-row">${skillBadges}</div>
-      ${badHireHint}
-      <div class="hero-card-stats">
-        <div class="hero-stat">Level<span>${lvl}</span></div>
-        <div class="hero-stat">Tickets/sec<span>${hs.status === 'Active' ? cpsContrib : '0'}</span></div>
-      </div>
-      <div class="hero-morale-wrap">
-        <div class="hero-morale-label">Morale: ${hs.morale}%</div>
-        <div class="hero-morale-bar-bg"><div class="hero-morale-bar" style="width:${hs.morale}%; background:${moraleColor}"></div></div>
-      </div>
-      <div class="hero-lvl-bar-wrap"><div class="hero-lvl-bar" style="width:${Math.min((lvl/20)*100,100)}%"></div></div>
-      <div class="hero-card-actions" style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-        <button class="btn-hero btn-levelup" ${S.tickets >= lvlUpCost ? '' : 'disabled'}>Lvl Up (${fmt(lvlUpCost)}🎫)</button>
-        <button class="btn-hero btn-train" ${S.tickets >= trainCost && hs.status === 'Active' ? '' : 'disabled'}>Train (${fmt(trainCost)}🎫)</button>
-      </div>
-    `;
-    card.querySelector('.btn-levelup').addEventListener('click', () => levelUpHero(h.id));
-    card.querySelector('.btn-train').addEventListener('click', () => startTraining(h.id));
-  } else {
-    const skillBadges = (h.skills || []).map(s => `<span class="skill-badge">${s}</span>`).join('');
-    const recruitCost = getHeroRecruitCost(h);
-    card.innerHTML = `
-      <div class="hero-card-top">
-        <span class="hero-emoji">${h.emoji}</span>
-        <div class="hero-meta">
-          <div class="hero-card-name">${h.name}</div>
-          <div class="hero-card-role">${h.role}</div>
-          <div class="hero-card-rarity" style="color:${rarityColor}">${h.rarity.toUpperCase()}</div>
-        </div>
-      </div>
-      <div class="hero-skills-row">${skillBadges}</div>
-      <p style="font-size:0.79rem;color:var(--text-dim);margin:0 0 8px;">${h.desc}</p>
-      <div class="hero-card-stats">
-        <div class="hero-stat">Base CPS<span>${h.baseCps}</span></div>
-        <div class="hero-stat">Cost<span>${fmt(recruitCost)}🎫</span></div>
-      </div>
-      <div class="hero-card-actions">
-        <button class="btn-hero btn-recruit" ${S.tickets >= recruitCost ? '' : 'disabled'}>Recruit</button>
-      </div>
-    `;
-    card.querySelector('.btn-recruit').addEventListener('click', () => recruitHero(h.id));
-  }
-  return card;
-}
-
-function renderSkills() {
-  const tree = document.getElementById('skill-tree');
-  tree.innerHTML = '';
-  SKILLS.forEach(sk => {
-    const unlocked = S.unlockedSkills.includes(sk.id);
-    const prereqsMet = sk.requires.every(r => S.unlockedSkills.includes(r));
-    const affordable = S.skillPoints >= sk.cost && !unlocked && prereqsMet;
-    const locked = !prereqsMet && !unlocked;
-    const node = document.createElement('div');
-    node.className = `skill-node${unlocked ? ' unlocked' : ''}${locked ? ' locked' : ''}${affordable ? ' affordable' : ''}`;
-    node.dataset.skill = sk.id;
-    const prereqNames = sk.requires.map(r => SKILLS.find(s => s.id === r)?.name || r).join(', ');
-    node.innerHTML = `
-      <div class="skill-icon">${sk.icon}</div>
-      <div class="skill-name">${sk.name}</div>
-      <div class="skill-desc">${sk.desc}</div>
-      ${sk.requires.length ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">Requires: ${prereqNames}</div>` : ''}
-      <div class="skill-cost">${unlocked ? '✓ Unlocked' : `${sk.cost} SP`}</div>
-    `;
-    if (!unlocked && !locked) node.addEventListener('click', () => buySkill(sk.id));
-    tree.appendChild(node);
-  });
-  document.getElementById('skill-points-label').textContent = `${S.skillPoints} SP available`;
-}
-
-function renderAchievements() {
-  const grid = document.getElementById('achievements-grid');
-  grid.innerHTML = '';
-  ACHIEVEMENTS.forEach(a => {
-    const achieved = S.achievedIds.includes(a.id);
-    let current = 0;
-    if (a.stat === 'lifetime')  current = S.lifetimeTickets;
-    if (a.stat === 'heroes')    current = S.heroesOwned;
-    if (a.stat === 'upgrades')  current = S.upgradesPurchased;
-    if (a.stat === 'incidents') current = S.incidentsResolved;
-    if (a.stat === 'dispatches') current = S.dispatches;
-    if (a.stat === 'maxCombo')  current = S.maxCombo;
-    if (a.stat === 'prestiges') current = S.prestiges;
-    if (a.stat === 'level')     current = S.level;
-    const pct = Math.min(current / a.goal * 100, 100);
-    const card = document.createElement('div');
-    card.className = `achievement-card${achieved ? ' achieved' : ''}`;
-    card.dataset.achievement = a.id;
-    card.innerHTML = `
-      <div class="ach-icon">${a.icon}</div>
-      <div class="ach-name">${a.name}</div>
-      <div class="ach-desc">${a.desc}</div>
-      <div class="ach-progress-wrap"><div class="ach-progress-bar" style="width:${pct}%"></div></div>
-      <div class="ach-progress-label">${fmt(current)} / ${fmt(a.goal)}</div>
-      <div class="ach-reward">${achieved ? '✅ ' : '🔒 '}${a.reward}</div>
-    `;
-    grid.appendChild(card);
-  });
-}
-
-function updateAchievementProgress(a, current) {
-  const card = document.querySelector(`[data-achievement="${a.id}"]`);
-  if (!card) return;
-  const pct = Math.min(current / a.goal * 100, 100);
-  const bar = card.querySelector('.ach-progress-bar');
-  if (bar) bar.style.width = pct + '%';
-  const lbl = card.querySelector('.ach-progress-label');
-  if (lbl) lbl.textContent = `${fmt(current)} / ${fmt(a.goal)}`;
-}
-
-// ══════════════════════════════════════════════════════════════
-// STATS TAB
-// ══════════════════════════════════════════════════════════════
-function renderStatsTab() {
-  const el = document.getElementById('stats-content');
-  if (!el) return;
-  const tier = CAREER[S.careerTier];
-  const ps = calcPerSec();
-  const pc = calcPerClick();
-  const totalClicks = S.totalClicks || 0;
-  const playTime = getPlayTimeStr();
-  const officePerks = (S.officePerksChosen || []).map(id => OFFICE_UPGRADES.find(x => x.id === id)).filter(Boolean);
-  el.innerHTML = `
-    <div class="stats-grid">
-      <div class="stat-card"><span class="stat-card-icon">🖥️</span><div class="stat-card-label">Current Title</div><div class="stat-card-value">${tier.icon} ${tier.title}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">⭐</span><div class="stat-card-label">Level</div><div class="stat-card-value">${S.level}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">🎫</span><div class="stat-card-label">Current Tickets</div><div class="stat-card-value">${fmt(S.tickets)}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">📊</span><div class="stat-card-label">Lifetime Tickets</div><div class="stat-card-value">${fmt(S.lifetimeTickets)}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">🖱️</span><div class="stat-card-label">Total Clicks</div><div class="stat-card-value">${fmt(totalClicks)}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">⚡</span><div class="stat-card-label">Per Click</div><div class="stat-card-value">${fmtDecimal(pc)}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">🔄</span><div class="stat-card-label">Per Second</div><div class="stat-card-value">${fmtDecimal(ps)}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">🏆</span><div class="stat-card-label">Promotions</div><div class="stat-card-value">${S.prestiges}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">🪑</span><div class="stat-card-label">Office Upgrades</div><div class="stat-card-value">${officePerks.length}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">🔥</span><div class="stat-card-label">Best Combo</div><div class="stat-card-value">×${S.maxCombo}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">🚨</span><div class="stat-card-label">Incidents Resolved</div><div class="stat-card-value">${S.incidentsResolved}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">📡</span><div class="stat-card-label">Dispatches</div><div class="stat-card-value">${S.dispatches}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">👥</span><div class="stat-card-label">Heroes Recruited</div><div class="stat-card-value">${S.heroesOwned} / ${HEROES.length}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">🛒</span><div class="stat-card-label">Upgrades Purchased</div><div class="stat-card-value">${S.upgradesPurchased}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">🧠</span><div class="stat-card-label">Skills Unlocked</div><div class="stat-card-value">${S.unlockedSkills.length} / ${SKILLS.length}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">🏅</span><div class="stat-card-label">Achievements</div><div class="stat-card-value">${S.achievedIds.length} / ${ACHIEVEMENTS.length}</div></div>
-      <div class="stat-card"><span class="stat-card-icon">⏱️</span><div class="stat-card-label">Play Time</div><div class="stat-card-value">${playTime}</div></div>
-    </div>
-    ${officePerks.length ? `
-      <div class="office-owned-wrap">
-        <h3 class="office-owned-title">🏢 Office Upgrades</h3>
-        <div class="office-owned-list">
-          ${officePerks.map(perk => `
-            <div class="office-owned-item">
-              <span class="office-owned-icon">${perk.icon}</span>
-              <div>
-                <strong>${perk.name}</strong>
-                <div>${perk.effectText}</div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    ` : ''}
-  `;
-}
-
-function getPlayTimeStr() {
-  const started = S.gameStarted || Date.now();
-  const ms = Date.now() - started;
-  const h = Math.floor(ms / 3600000);
-  const m = Math.floor((ms % 3600000) / 60000);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
-
-// ══════════════════════════════════════════════════════════════
-// EXPORT / IMPORT / SHARE
-// ══════════════════════════════════════════════════════════════
-function exportSave() {
-  saveGame();
-  const data = localStorage.getItem(SAVE_KEY);
-  const blob = new Blob([data], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `servicedeskhero_save_${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  toast('💾 Save exported!', 'green');
-}
-
-function importSave() {
-  document.getElementById('import-file-input').click();
-}
-
-function handleImportFile(evt) {
-  const file = evt.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
+  function loadGame() {
     try {
-      const data = JSON.parse(e.target.result);
-      if (!data.lifetimeTickets && data.lifetimeTickets !== 0) throw new Error('Invalid save');
-      localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-      loadGame();
-      calcOfflineIncome();
-      renderAll();
-      toast('📂 Save imported successfully!', 'green');
-    } catch (err) {
-      toast('❌ Invalid save file!', 'red');
-    }
-  };
-  reader.readAsText(file);
-  evt.target.value = '';
-}
-
-function shareStats() {
-  const tier = CAREER[S.careerTier];
-  const ps = calcPerSec();
-  const text = [
-    `🖥️ Service Desk Hero — Career Stats`,
-    `━━━━━━━━━━━━━━━━━━━━━━━━━`,
-    `${tier.icon} Title: ${tier.title}`,
-    `⭐ Level: ${S.level}`,
-    `🏆 Promotions: ${S.prestiges}`,
-    `🎫 Lifetime Tickets: ${fmt(S.lifetimeTickets)}`,
-    `⚡ Tickets/sec: ${fmtDecimal(ps)}`,
-    `🔥 Best Combo: ×${S.maxCombo}`,
-    `🚨 Incidents Resolved: ${S.incidentsResolved}`,
-    `🏅 Achievements: ${S.achievedIds.length}/${ACHIEVEMENTS.length}`,
-    ``,
-    `Play at www.servicedeskhero.com`
-  ].join('\n');
-  navigator.clipboard.writeText(text).then(() => {
-    toast('📋 Stats copied to clipboard!', 'green');
-  }).catch(() => {
-    toast('❌ Could not copy to clipboard', 'red');
-  });
-}
-
-// ══════════════════════════════════════════════════════════════
-// HELP MODAL
-// ══════════════════════════════════════════════════════════════
-function openHelp() {
-  document.getElementById('help-modal').classList.remove('hidden');
-}
-function closeHelp() {
-  document.getElementById('help-modal').classList.add('hidden');
-  renderOnboarding();
-}
-
-function openFeedback() {
-  document.getElementById('feedback-modal').classList.remove('hidden');
-  document.getElementById('feedback-status').textContent = '';
-}
-
-function closeFeedback() {
-  document.getElementById('feedback-modal').classList.add('hidden');
-}
-
-async function submitFeedback(evt) {
-  evt.preventDefault();
-  const type = document.getElementById('feedback-type').value;
-  const message = document.getElementById('feedback-message').value.trim();
-  const email = document.getElementById('feedback-email').value.trim();
-  const statusEl = document.getElementById('feedback-status');
-  const submitBtn = document.getElementById('btn-submit-feedback');
-
-  if (!message) {
-    statusEl.textContent = 'Please write something first.';
-    return;
-  }
-
-  submitBtn.disabled = true;
-  statusEl.textContent = 'Sending feedback...';
-
-  try {
-    const version = document.getElementById('build-version')?.textContent || 'unknown';
-    const res = await fetch(FEEDBACK_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type,
-        message,
-        email,
-        version,
-        page: window.location.pathname,
-        userAgent: navigator.userAgent,
-      }),
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    document.getElementById('feedback-form').reset();
-    statusEl.textContent = 'Feedback sent. Good. Now we have evidence.';
-    toast('💬 Feedback submitted!', 'green');
-    setTimeout(closeFeedback, 700);
-  } catch (err) {
-    console.error('feedback submit failed', err);
-    statusEl.textContent = 'Could not send feedback right now. Try again later.';
-    toast('Feedback failed to send.', 'red');
-  } finally {
-    submitBtn.disabled = false;
-  }
-}
-
-// ══════════════════════════════════════════════════════════════
-// SOUND TOGGLE
-// ══════════════════════════════════════════════════════════════
-function toggleClockedOut() {
-  if (S.clockedOut) {
-    S.clockedOut = false;
-    const offMs = Date.now() - (S.clockedOutAt || Date.now());
-    S.clockedOutAt = null;
-    if (offMs >= 60_000) {
-      S.restedBuffUntil = Date.now() + 120_000;
-      toast('☀️ Clocked back in. Rested bonus active for 2 minutes.', 'green');
-    } else {
-      toast('☀️ Back on shift. That break barely counts, but fine.', 'green');
-    }
-  } else {
-    S.clockedOut = true;
-    S.clockedOutAt = Date.now();
-    S.restedBuffUntil = 0;
-    if (activeIncident) {
-      dismissIncident(false, true);
-      toast('🕒 Clocked out. Current incident deferred to the next poor soul.', 'gold');
-    } else {
-      toast('🕒 Clocked out. Click income halted; squad keeps the lights on at 60%.', 'gold');
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && parsed.saveVersion === SAVE_KEY ? parsed : null;
+    } catch {
+      return null;
     }
   }
-  renderStats();
-}
 
-function toggleSound() {
-  const on = SFX.toggle();
-  document.getElementById('btn-sound').textContent = on ? '🔊' : '🔇';
-  localStorage.setItem('sdh_sound', on ? '1' : '0');
-}
-
-function loadSoundPref() {
-  const pref = localStorage.getItem('sdh_sound');
-  if (pref === '0') {
-    SFX.enabled = false;
-    document.getElementById('btn-sound').textContent = '🔇';
+  function toast(message, tone = 'neutral') {
+    const area = document.getElementById('toast-area');
+    if (!area) return;
+    const node = document.createElement('div');
+    node.className = `toast ${tone}`;
+    node.textContent = message;
+    area.prepend(node);
+    setTimeout(() => node.remove(), 2800);
   }
-}
 
-function renderAll() {
-  renderStats();
-  renderXpBar();
-  renderUpgrades();
-  renderSquad();
-  renderSkills();
-  renderAchievements();
-  renderStatsTab();
-  renderOnboarding();
-  checkPromotionReady();
-  if ((S.officeDraftChoices || []).length) renderOfficeInterlude();
-}
-
-// ══════════════════════════════════════════════════════════════
-// SAVE / LOAD
-// ══════════════════════════════════════════════════════════════
-const SAVE_KEY = 'sdh_save_v2';
-
-function saveGame() {
-  S.lastSave = Date.now();
-  S.lastTick = Date.now();
-  localStorage.setItem(SAVE_KEY, JSON.stringify(S));
-  const ind = document.getElementById('save-indicator');
-  ind.textContent = '💾 Saved';
-  ind.style.color = 'var(--green)';
-}
-
-function loadGame() {
-  const raw = localStorage.getItem(SAVE_KEY);
-  if (!raw) return;
-  try {
-    const saved = JSON.parse(raw);
-    const defaults = buildDefaultState();
-    // Carefully merge nested objects so we don't overwrite new defaults with undefined
-    const merged = Object.assign({}, defaults, saved);
-    merged.skillMods = Object.assign({}, defaults.skillMods, saved.skillMods || {});
-    merged.heroState = Object.assign({}, defaults.heroState, saved.heroState || {});
-    merged.upgradeOwned = Object.assign({}, defaults.upgradeOwned, saved.upgradeOwned || {});
-    merged.officeMods = Object.assign({}, defaults.officeMods, saved.officeMods || {});
-    merged.officePerksChosen = Array.isArray(saved.officePerksChosen) ? saved.officePerksChosen : [];
-    merged.officeDraftChoices = Array.isArray(saved.officeDraftChoices) ? saved.officeDraftChoices : [];
-    S = merged;
-    // Restore non-serializable (timers)
-    S.comboTimer = null;
-    // Re-apply modifiers from scratch to avoid double-stacking
-    reapplyAllSkills();
-    reapplyAllAchievements();
-    recalcOfficeMods();
-  } catch(e) {
-    console.error('Failed to load save:', e);
+  function spendAP(cost) {
+    if (S.actionPoints < cost) {
+      toast('Not enough AP this week.', 'bad');
+      if (SFX.error) SFX.error();
+      return false;
+    }
+    S.actionPoints -= cost;
+    return true;
   }
-}
 
-let _resetPending = false;
-function resetGame() {
-  const btn = document.getElementById('btn-reset');
-  if (!_resetPending) {
-    // First click: arm the button
-    _resetPending = true;
-    btn.textContent = 'Sure? Click again';
-    btn.style.background = 'rgba(248,113,113,0.25)';
-    setTimeout(() => {
-      if (_resetPending) {
-        _resetPending = false;
-        btn.textContent = 'Reset';
-        btn.style.background = '';
+  function recordAction(label) {
+    S.weeklyActionsTaken.unshift(label);
+    S.weeklyActionsTaken = S.weeklyActionsTaken.slice(0, 10);
+    addModifier(label);
+  }
+
+  function canUseAction(action) {
+    if (S.actionPoints < action.apCost) return 'Not enough AP';
+    if (action.target === 'staff' && !staffById(S.selectedStaffId)) return 'Select an employee';
+    if (action.target === 'candidate' && !candidateById(S.selectedCandidateId)) return 'Select a candidate';
+    if (action.id === 'approve_offer' && getOpenHeadcount() <= 0) return 'No open headcount';
+    if (action.id === 'approve_offer' && S.weeklyFlags.freezeHiring) return 'Hiring is frozen this week';
+    if (action.id === 'promote_supervisor') {
+      const staff = staffById(S.selectedStaffId);
+      if (!staff) return 'Select an employee';
+      if (staff.isSupervisor) return 'Already a supervisor';
+      if (getOpenSupervisorSlots() <= 0) return 'No supervisor slot';
+      if (staff.competence < 62) return 'Needs more competence';
+      if (S.careerTier < 1) return 'Promote first';
+    }
+    if (action.id === 'fire_employee') {
+      const staff = staffById(S.selectedStaffId);
+      if (!staff || staff.isSupervisor) return 'Select a non-supervisor';
+    }
+    if (action.id === 'fire_supervisor') {
+      const staff = staffById(S.selectedStaffId);
+      if (!staff || !staff.isSupervisor) return 'Select a supervisor';
+    }
+    if (action.id === 'ask_review' && S.weeklyFlags.reviewRequested) return 'Already asked this week';
+    return '';
+  }
+
+  function performAction(id) {
+    const action = WEEKLY_ACTIONS.find((item) => item.id === id);
+    if (!action) return;
+    const blocked = canUseAction(action);
+    if (blocked) {
+      toast(blocked, 'bad');
+      if (SFX.error) SFX.error();
+      return;
+    }
+    if (!spendAP(action.apCost)) return;
+    const staff = staffById(S.selectedStaffId);
+    const candidate = candidateById(S.selectedCandidateId);
+
+    switch (id) {
+      case 'work_tickets':
+        applyEffects({ backlog: -9, politicalCapital: 1 });
+        shiftAllStaff('burnout', 1);
+        recordAction('Worked tickets instead of making slides.');
+        break;
+      case 'reporting':
+        applyEffects({ politicalCapital: 7, compliance: 2, backlog: 2, promotionPressure: 2 });
+        recordAction('Built executive-ready reporting and called it visibility.');
+        break;
+      case 'budgeting':
+        applyEffects({ budgetHealth: 8, politicalCapital: 1, morale: -1 });
+        recordAction('Did budgeting before Finance weaponized the spreadsheet.');
+        break;
+      case 'meetings':
+        applyEffects({ politicalCapital: 4, backlog: 3, morale: 2 });
+        recordAction('Sat in meetings until alignment replaced progress.');
+        break;
+      case 'time_tracking':
+        applyEffects({ compliance: 10, backlog: 2, politicalCapital: -1 });
+        recordAction('Fed compliance with timestamps.');
+        break;
+      case 'one_on_one':
+        staff.morale = clamp(staff.morale + 14, 0, 100);
+        staff.loyalty = clamp(staff.loyalty + 10, 0, 100);
+        staff.managerRelationship = clamp(staff.managerRelationship + 10, 0, 100);
+        staff.burnout = clamp(staff.burnout - 8, 0, 100);
+        if (staff.flags.includes('hidden-problem')) {
+          staff.flags = staff.flags.filter((flag) => flag !== 'hidden-problem');
+          applyEffects({ backlog: -3, compliance: 2 });
+          recordAction(`Held a 1:1 with ${staff.name} and found a hidden problem.`);
+        } else recordAction(`Held a 1:1 with ${staff.name}.`);
+        recomputeMorale();
+        break;
+      case 'approve_offer': {
+        const hire = { ...candidate, managerId: chooseManagerForHire() };
+        S.staffState.push(hire);
+        S.candidateSlate = S.candidateSlate.filter((item) => item.id !== candidate.id);
+        S.selectedCandidateId = S.candidateSlate[0] ? S.candidateSlate[0].id : null;
+        applyEffects({ budgetHealth: -5, backlog: -4, politicalCapital: 2, morale: 1 });
+        recordAction(`Approved an offer for ${hire.name}.`);
+        if (SFX.recruit) SFX.recruit();
+        break;
       }
-    }, 3000);
-    return;
+      case 'approve_raise':
+        staff.annualSalary = Math.round(staff.annualSalary * 1.08);
+        staff.morale = clamp(staff.morale + 18, 0, 100);
+        staff.loyalty = clamp(staff.loyalty + 12, 0, 100);
+        staff.managerRelationship = clamp(staff.managerRelationship + 8, 0, 100);
+        applyEffects({ budgetHealth: -6, politicalCapital: 1 });
+        recomputeMorale();
+        recordAction(`Approved a raise for ${staff.name}.`);
+        break;
+      case 'promote_supervisor':
+        staff.isSupervisor = true;
+        staff.role = `Supervisor - ${staff.role}`;
+        staff.annualSalary = Math.round(staff.annualSalary * 1.14);
+        staff.loyalty = clamp(staff.loyalty + 10, 0, 100);
+        staff.managerRelationship = clamp(staff.managerRelationship + 8, 0, 100);
+        applyEffects({ politicalCapital: 5, budgetHealth: -4, morale: 3 });
+        rebalanceReports();
+        recordAction(`Promoted ${staff.name} to supervisor.`);
+        if (SFX.levelUp) SFX.levelUp();
+        break;
+      case 'fire_employee': {
+        const name = staff.name;
+        S.staffState = S.staffState.filter((item) => item.id !== staff.id);
+        applyEffects({ budgetHealth: 8, morale: -12, backlog: 8, narrativeDebt: 6, politicalCapital: S.budgetHealth < 40 ? 2 : -4 });
+        recomputeMorale();
+        recordAction(`Fired ${name}.`);
+        break;
+      }
+      case 'fire_supervisor': {
+        const name = staff.name;
+        S.staffState.filter((item) => item.managerId === staff.id).forEach((item) => { item.managerId = 'player'; });
+        S.staffState = S.staffState.filter((item) => item.id !== staff.id);
+        applyEffects({ budgetHealth: 12, morale: -18, backlog: 10, narrativeDebt: 8, politicalCapital: 4 });
+        rebalanceReports();
+        recomputeMorale();
+        recordAction(`Fired supervisor ${name}.`);
+        break;
+      }
+      case 'ask_review': {
+        const score = computePromotionScore();
+        S.weeklyFlags.reviewRequested = true;
+        if (score >= currentCareer().promotionTarget - 6 && !S.pipStatus) {
+          applyEffects({ politicalCapital: 6, promotionPressure: 18 });
+          recordAction('Asked for review at the exact moment the numbers could support it.');
+        } else {
+          applyEffects({ politicalCapital: -6, narrativeDebt: 1 });
+          recordAction('Asked for review too early and leadership noticed.');
+        }
+        break;
+      }
+    }
+
+    if (!staffById(S.selectedStaffId)) S.selectedStaffId = S.staffState[0] ? S.staffState[0].id : null;
+    saveGame('Autosaved');
+    renderAll();
   }
-  // Second click: actually reset
-  _resetPending = false;
-  btn.textContent = 'Reset';
-  btn.style.background = '';
+  function performPoliticalMove(id) {
+    if (S.weeklyFlags.usedPoliticalMove) {
+      toast('You already spent your weekly political move.', 'bad');
+      return;
+    }
+    const move = POLITICAL_MOVES.find((item) => item.id === id);
+    if (!move) return;
+    if (!spendAP(move.apCost)) return;
 
-  // Stop the tick so it doesn't re-save over the cleared state
-  clearInterval(tickInterval);
-  tickInterval = null;
+    switch (id) {
+      case 'tell_truth':
+        applyEffects({ politicalCapital: -4, narrativeDebt: -8, compliance: 3, promotionPressure: 4 });
+        enqueueConsequence('truth_respect');
+        recordAction('Told the truth and watched the room react like it was impolite.');
+        break;
+      case 'spin_boss':
+        applyEffects({ politicalCapital: 9, narrativeDebt: 8, compliance: -1 });
+        recordAction('Spun the week into an executive narrative with only light fraud energy.');
+        break;
+      case 'hide_backlog':
+        applyEffects({ politicalCapital: 8, narrativeDebt: 10 });
+        enqueueConsequence('hidden_backlog');
+        recordAction('Hid backlog behind platform stabilization language.');
+        break;
+      case 'freeze_hiring':
+        applyEffects({ budgetHealth: 8, morale: -5, narrativeDebt: 4 });
+        enqueueConsequence('frozen_hiring');
+        S.weeklyFlags.freezeHiring = true;
+        S.candidateSlate = [];
+        S.selectedCandidateId = null;
+        recordAction('Froze hiring and called it fiscal discipline.');
+        break;
+      case 'skip_time_tracking':
+        applyEffects({ actionPoints: 1, compliance: -8, narrativeDebt: 7 });
+        enqueueConsequence('skipped_tracking');
+        recordAction('Skipped time tracking to create strategic capacity out of audit risk.');
+        break;
+      case 'cancel_one_on_ones':
+        applyEffects({ actionPoints: 1, morale: -7, narrativeDebt: 6 });
+        enqueueConsequence('canceled_one_on_ones');
+        recordAction('Canceled 1:1s and converted trust into free AP.');
+        break;
+      case 'blame_vendor':
+        applyEffects({ politicalCapital: 6, narrativeDebt: 7 });
+        enqueueConsequence('vendor_receipts');
+        recordAction('Blamed the vendor. This usually works right up until it does not.');
+        break;
+      case 'midnight_oil':
+        applyEffects({ backlog: -8, politicalCapital: 4, morale: -6, narrativeDebt: 5 });
+        enqueueConsequence('burnout_wave');
+        S.weeklyFlags.midnightOil = true;
+        recordAction('Pushed midnight oil and called exhaustion commitment.');
+        break;
+    }
 
-  localStorage.removeItem(SAVE_KEY);
-  S = buildDefaultState();
-
-  renderAll();
-  startTick();
-  toast('💀 Game reset. Fresh start!', 'red');
-}
-
-// ── Auto-save every 30s ──
-setInterval(saveGame, 30_000);
-
-// ══════════════════════════════════════════════════════════════
-// TABS
-// ══════════════════════════════════════════════════════════════
-function initTabs() {
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
-  });
-}
-
-// ══════════════════════════════════════════════════════════════
-// BOOT
-// ══════════════════════════════════════════════════════════════
-(function init() {
-  loadGame();
-  recalcOfficeMods();
-
-  // Pick up difficulty from bootstrap (stored in localStorage by difficulty-modal script)
-  const bootstrapDiff = localStorage.getItem('difficultyMode') || localStorage.getItem('sdhDifficulty') || (window.GAME_SETTINGS && window.GAME_SETTINGS.difficulty);
-  if (bootstrapDiff && DIFFICULTY_MODES.find(d => d.id === bootstrapDiff)) {
-    S.difficultyId = bootstrapDiff;
+    S.weeklyFlags.usedPoliticalMove = true;
+    saveGame('Autosaved');
+    renderAll();
   }
 
-  // Ensure gameStarted is tracked
-  if (!S.gameStarted) S.gameStarted = Date.now();
-  if (!S.totalClicks) S.totalClicks = 0;
-  if (!S.applicantPool || S.applicantPool.length === 0) refreshJobBoard(0);
-  calcOfflineIncome();
-  initTabs();
-  loadSoundPref();
-  renderAll();
-  startTick();
-  scheduleNextIncident();
-
-  // Show help on first visit
-  if (!localStorage.getItem('sdh_seen_help')) {
-    openHelp();
-    localStorage.setItem('sdh_seen_help', '1');
+  function resolveInboxChoice(eventId, choiceId) {
+    const event = S.weeklyInbox.find((item) => item.id === eventId);
+    if (!event || event.resolved) return;
+    const choice = event.choices.find((item) => item.id === choiceId);
+    if (!choice) return;
+    applyEffects(choice.effects);
+    if (choice.consequence) enqueueConsequence(choice.consequence);
+    event.resolved = true;
+    event.chosenLabel = choice.label;
+    recordAction(`${event.title}: ${choice.label}.`);
+    if (SFX.purchase) SFX.purchase();
+    saveGame('Autosaved');
+    renderAll();
   }
 
-  // Event bindings
-  document.getElementById('btn-refresh-board').addEventListener('click', () => refreshJobBoard(500));
-  document.getElementById('main-clicker').addEventListener('click', handleClick);
-  document.getElementById('btn-save').addEventListener('click', saveGame);
-  document.getElementById('btn-reset').addEventListener('click', resetGame);
-  document.getElementById('btn-promote').addEventListener('click', doPromotion);
-  document.getElementById('btn-sound').addEventListener('click', toggleSound);
-  document.getElementById('btn-help').addEventListener('click', openHelp);
-  document.getElementById('btn-feedback').addEventListener('click', openFeedback);
-  document.getElementById('btn-clock-toggle').addEventListener('click', toggleClockedOut);
-  document.getElementById('btn-close-help').addEventListener('click', closeHelp);
-  document.getElementById('help-overlay').addEventListener('click', closeHelp);
-  document.getElementById('btn-close-feedback').addEventListener('click', closeFeedback);
-  document.getElementById('feedback-overlay').addEventListener('click', closeFeedback);
-  document.getElementById('feedback-form').addEventListener('submit', submitFeedback);
-  document.getElementById('btn-dismiss-onboarding').addEventListener('click', () => {
-    S.tutorialDismissed = true;
-    renderOnboarding();
-  });
-  document.getElementById('btn-onboarding-action').addEventListener('click', () => {
-    const action = document.getElementById('btn-onboarding-action').dataset.action;
-    if (action === 'squad') setActiveTab('squad');
-    else if (action === 'upgrades') setActiveTab('upgrades');
-    else if (action === 'click') document.getElementById('main-clicker').click();
-    else if (action === 'incident') openDispatchModal();
-    else if (action === 'help') openHelp();
-  });
-  // Incident: RESPOND NOW opens dispatch modal
-  document.getElementById('incident-resolve').addEventListener('click', openDispatchModal);
-  // Dispatch modal: self-handle + overlay close
-  document.getElementById('dispatch-self-btn').addEventListener('click', handleSelf);
-  document.getElementById('dispatch-overlay').addEventListener('click', closeDispatchModal);
-  // Minigame: click button + close/continue
-  document.getElementById('btn-minigame-click').addEventListener('click', onMinigameClick);
-  document.getElementById('btn-minigame-close').addEventListener('click', closeMinigame);
-  document.getElementById('btn-share').addEventListener('click', shareStats);
-  document.getElementById('btn-export').addEventListener('click', exportSave);
-  document.getElementById('btn-import').addEventListener('click', importSave);
-  document.getElementById('import-file-input').addEventListener('change', handleImportFile);
-  
-  // Fired Modal
-  document.getElementById('btn-accept-fired').addEventListener('click', () => {
+  function unresolvedMandatory() {
+    return S.weeklyInbox.filter((item) => item.mandatory && !item.resolved).length;
+  }
+
+  function computePromotionScore() {
+    const score =
+      S.politicalCapital * 0.35 +
+      (100 - S.backlog) * 0.25 +
+      S.budgetHealth * 0.20 +
+      S.compliance * 0.10 +
+      S.morale * 0.10;
+    const debtPenalty = Math.max(0, S.narrativeDebt - 40) * 0.25;
+    const warningPenalty = S.warningCount * 4 + (S.pipStatus ? 8 : 0);
+    return clamp(Math.round(score - debtPenalty - warningPenalty), 0, 100);
+  }
+
+  function teamDelivery() {
+    const total = S.staffState.reduce((sum, staff) => {
+      const effectiveness = staff.competence * (0.55 + staff.morale / 200) * (1 - staff.burnout / 160);
+      return sum + Math.max(0, effectiveness);
+    }, 0);
+    const supervisorBonus = S.staffState.filter((staff) => staff.isSupervisor).reduce((sum, staff) => sum + staff.competence * 0.12, 0);
+    return Math.round(total / 22 + supervisorBonus / 14);
+  }
+
+  function applyStaffDrift() {
+    S.staffState.forEach((staff) => {
+      const moraleDrift = (S.backlog > 72 ? -5 : S.backlog > 58 ? -2 : 0) + (S.weeklyFlags.freezeHiring ? -2 : 0);
+      const burnoutDrift = S.weeklyFlags.midnightOil ? 12 : S.backlog > 65 ? 4 : -2;
+      staff.morale = clamp(staff.morale + moraleDrift, 0, 100);
+      staff.burnout = clamp(staff.burnout + burnoutDrift, 0, 100);
+      staff.managerRelationship = clamp(staff.managerRelationship + (S.weeklyFlags.usedPoliticalMove ? -1 : 1), 0, 100);
+      if (staff.burnout > 78 && !staff.flags.includes('flight-risk')) staff.flags.push('flight-risk');
+    });
+    recomputeMorale();
+  }
+
+  function maybeQuitter() {
+    const risky = S.staffState.filter((staff) => !staff.isSupervisor && (staff.morale < 24 || staff.burnout > 88 || (staff.flags.includes('flight-risk') && staff.morale < 40)));
+    if (!risky.length || Math.random() > 0.22) return;
+    const quitter = pick(risky);
+    S.staffState = S.staffState.filter((staff) => staff.id !== quitter.id);
+    applyEffects({ backlog: 8, politicalCapital: -3, morale: -4 });
+    logWeek(`${quitter.name} quit for a role described as “strategic but better staffed.”`, 'bad');
+    toast(`${quitter.name} quit.`, 'bad');
+  }
+
+  function maybeExposure() {
+    if (S.narrativeDebt < 55) return false;
+    const threshold = 0.12 + (S.narrativeDebt - 55) / 120;
+    if (Math.random() > threshold) return false;
+    applyEffects({ politicalCapital: -10, compliance: -6, backlog: 5 });
+    logWeek('An exposure event hits: somebody senior found the difference between the deck and reality.', 'bad');
+    toast('Exposure event: the narrative cracked.', 'bad');
+    return true;
+  }
+
+  function promoteCareer() {
+    if (S.careerTier >= CAREER.length - 1) return;
+    S.careerTier += 1;
+    S.promotionPressure = 0;
+    S.warningCount = Math.max(0, S.warningCount - 1);
+    S.pipStatus = false;
+    applyEffects({ politicalCapital: 8, narrativeDebt: -4, budgetHealth: 3 });
+    logWeek(`Promoted to ${currentCareer().title}. The org is bigger and the excuses are more expensive.`, 'good');
+    toast(`Promoted to ${currentCareer().title}.`, 'good');
+    if (SFX.promotion) SFX.promotion();
+  }
+
+  function demoteCareer(reason) {
+    if (S.careerTier <= 0) return firePlayer(reason);
+    S.careerTier -= 1;
+    S.demotions += 1;
+    S.promotionPressure = 0;
+    S.warningCount = 1;
+    S.pipStatus = true;
+    applyEffects({ politicalCapital: -14, narrativeDebt: 4, morale: -4 });
+    logWeek(`Demoted to ${currentCareer().title}. ${reason}`, 'bad');
+    toast('Demoted.', 'bad');
+  }
+
+  function firePlayer(reason) {
+    S.isFired = true;
+    S.lastFiredReason = reason;
+    document.getElementById('fired-reason').textContent = reason;
+    document.getElementById('fired-modal').classList.remove('hidden');
+    logWeek(`Fired. ${reason}`, 'bad');
+    saveGame('Fired');
+  }
+
+  function evaluatePromotionAndFailure(exposureTriggered) {
+    const score = computePromotionScore();
+    const target = currentCareer().promotionTarget;
+    if (target < 999 && !S.pipStatus && S.warningCount === 0) {
+      if (score > target) S.promotionPressure = clamp(S.promotionPressure + Math.max(8, score - target + 8), 0, 100);
+      else if (score > target - 8) S.promotionPressure = clamp(S.promotionPressure + 6, 0, 100);
+      else S.promotionPressure = clamp(S.promotionPressure - 4, 0, 100);
+    }
+    const severe = S.backlog > 85 || S.compliance < 24 || S.morale < 24 || S.narrativeDebt > 86 || exposureTriggered;
+    const badWeek = severe || score < 42;
+    if (badWeek) {
+      if (S.pipStatus || severe) {
+        demoteCareer('Leadership has decided that accountability is directional and downward.');
+      } else if (S.warningCount >= 1) {
+        S.pipStatus = true;
+        logWeek('You are now on a Performance Improvement Plan. The plan is mostly vibes and threat.', 'bad');
+        toast('You are now on PIP.', 'bad');
+      } else {
+        S.warningCount += 1;
+        logWeek('Formal warning issued. The slide deck now contains your name in red.', 'bad');
+      }
+    } else if (score > 62) {
+      if (S.warningCount > 0) S.warningCount -= 1;
+      if (S.pipStatus && score > 68) {
+        S.pipStatus = false;
+        logWeek('PIP cleared. You remain employed, which is its own reward.', 'good');
+      }
+      if (S.promotionPressure >= 100) promoteCareer();
+    }
+  }
+
+  function endWeek() {
+    if (unresolvedMandatory()) return void toast('Resolve mandatory inbox decisions before ending the week.', 'bad');
+    const incomingLoad = 8 + S.careerTier * 2 + Math.round(S.staffState.length / 4) + getOpenHeadcount() * 2 + rand(0, 4);
+    const worked = S.weeklyActionsTaken.filter((item) => item.includes('Worked tickets')).length;
+    const resolved = teamDelivery() + worked * 8 + (S.weeklyFlags.midnightOil ? 4 : 0);
+    S.backlog = clamp(S.backlog + incomingLoad - resolved, 0, 100);
+    S.budgetHealth = clamp(S.budgetHealth - 1, 0, 100);
+    S.compliance = clamp(S.compliance - 1, 0, 100);
+    applyStaffDrift();
+    maybeQuitter();
+    const exposureTriggered = maybeExposure();
+    S.lifetimeEarnings += weeklyPay();
+    evaluatePromotionAndFailure(exposureTriggered);
+    if (S.isFired) {
+      saveGame('Fired');
+      renderAll();
+      return;
+    }
+    S.week += 1;
+    rebalanceReports();
+    prepareWeek();
+    saveGame('Autosaved');
+    renderAll();
+  }
+
+  function restartAfterFiring() {
+    const keep = {
+      firings: S.firings + 1,
+      lifetimeEarnings: S.lifetimeEarnings,
+      politicalCapital: 26,
+      narrativeDebt: 6,
+      weekLog: [{ week: 1, text: 'You were fired and rehired somewhere lower in the org chart. Corporate memory is short.', tone: 'bad' }],
+    };
+    S = buildFreshState(keep);
+    prepareWeek(true);
     document.getElementById('fired-modal').classList.add('hidden');
-  });
+    saveGame('Restarted');
+    renderAll();
+  }
 
-  // Auto-save on window close or refresh
-  window.addEventListener('beforeunload', saveGame);
+  function selectedStaff() {
+    return staffById(S.selectedStaffId);
+  }
+  function renderHeader() {
+    const role = currentCareer();
+    const score = computePromotionScore();
+    const status = S.pipStatus ? 'PIP' : S.warningCount > 0 ? `Warning x${S.warningCount}` : S.careerTier === CAREER.length - 1 ? 'CIO' : 'Active';
+    document.getElementById('week-display').textContent = `Week ${S.week}`;
+    document.getElementById('role-title').textContent = role.title;
+    document.getElementById('org-scale').textContent = role.orgScale;
+    document.getElementById('salary-hourly').textContent = `$${role.hourlyRate}/hr`;
+    document.getElementById('salary-annual').textContent = fmtMoney(role.annualSalary);
+    document.getElementById('salary-lifetime').textContent = fmtMoney(S.lifetimeEarnings);
+    document.getElementById('promotion-pressure').textContent = `${S.promotionPressure}%`;
+    document.getElementById('promotion-score').textContent = `${score}`;
+    document.getElementById('status-pill').textContent = status;
+    document.getElementById('status-pill').className = `status-pill ${S.pipStatus ? 'bad' : S.warningCount ? 'warn' : 'good'}`;
+  }
+
+  function metricCard(label, value, tone, invert = false) {
+    const pctValue = invert ? 100 - value : value;
+    return `<div class="metric-card ${tone}"><div class="metric-top"><span>${label}</span><strong>${pct(value)}</strong></div><div class="metric-bar"><span style="width:${clamp(pctValue, 0, 100)}%"></span></div></div>`;
+  }
+
+  function renderSummary() {
+    document.getElementById('summary-metrics').innerHTML = [
+      metricCard('Backlog', S.backlog, 'bad', true),
+      metricCard('Morale', S.morale, 'good'),
+      metricCard('Budget Health', S.budgetHealth, 'warn'),
+      metricCard('Compliance', S.compliance, 'info'),
+      metricCard('Political Capital', S.politicalCapital, 'purple'),
+      metricCard('Narrative Debt', S.narrativeDebt, 'bad'),
+    ].join('');
+    document.getElementById('week-modifiers').innerHTML = (S.weeklyModifiers.length ? S.weeklyModifiers : ['No active modifiers yet.']).map((item) => `<li>${item}</li>`).join('');
+  }
+
+  function renderInbox() {
+    document.getElementById('inbox-list').innerHTML = S.weeklyInbox.map((event) => `
+      <article class="inbox-card ${event.mandatory ? 'mandatory' : ''} ${event.resolved ? 'resolved' : ''}">
+        <div class="inbox-head">
+          <span class="badge">${event.category.toUpperCase()}</span>
+          ${event.mandatory ? '<span class="badge danger">Mandatory</span>' : '<span class="badge">Optional</span>'}
+        </div>
+        <h3>${event.title}</h3>
+        <p>${event.summary}</p>
+        ${event.resolved ? `<div class="resolved-note">Resolved: ${event.chosenLabel}</div>` : `<div class="choice-list">${event.choices.map((choice) => `<button class="choice-btn" data-event-id="${event.id}" data-choice-id="${choice.id}"><strong>${choice.label}</strong><span>${choice.summary}</span></button>`).join('')}</div>`}
+      </article>`).join('') || '<div class="empty-state">No inbox items. This is suspicious.</div>';
+    document.getElementById('mandatory-count').textContent = `${unresolvedMandatory()} unresolved`;
+  }
+
+  function renderActions() {
+    const employee = selectedStaff();
+    const candidate = candidateById(S.selectedCandidateId);
+    document.getElementById('ap-display').textContent = `${S.actionPoints} AP`;
+    document.getElementById('action-target').textContent = employee ? `Employee focus: ${employee.name}` : candidate ? `Candidate focus: ${candidate.name}` : 'Select an employee or candidate for targeted actions.';
+    document.getElementById('action-grid').innerHTML = WEEKLY_ACTIONS.map((action) => {
+      const blocked = canUseAction(action);
+      return `<button class="action-card" data-action-id="${action.id}" ${blocked ? 'disabled' : ''}><span class="action-icon">${action.icon}</span><span class="action-name">${action.label}</span><span class="action-cost">${action.apCost} AP</span><span class="action-desc">${blocked || action.description}</span></button>`;
+    }).join('');
+    document.getElementById('action-log').innerHTML = (S.weeklyActionsTaken.length ? S.weeklyActionsTaken : ['No actions taken yet.']).map((item) => `<li>${item}</li>`).join('');
+  }
+
+  function orgSummary() {
+    return `${S.staffState.length} filled • ${getOpenHeadcount()} open req • ${S.staffState.filter((staff) => staff.isSupervisor).length} supervisors • ${getOpenSupervisorSlots()} open supervisor slots`;
+  }
+
+  function staffCard(staff, managerLabel = '') {
+    const selected = S.selectedStaffId === staff.id ? 'selected' : '';
+    const manager = managerLabel || (staff.managerId === 'player' ? 'You' : (staffById(staff.managerId)?.name || 'You'));
+    return `<button class="staff-card ${selected}" data-staff-id="${staff.id}"><div class="staff-top"><span class="staff-emoji">${staff.emoji}</span><span class="staff-name">${staff.name}</span>${staff.isSupervisor ? '<span class="badge purple">Supervisor</span>' : ''}</div><div class="staff-role">${staff.role}</div><div class="staff-meta">Mgr: ${manager}</div><div class="staff-stats"><span>Comp ${staff.competence}</span><span>Morale ${staff.morale}</span><span>Burnout ${staff.burnout}</span></div></button>`;
+  }
+
+  function renderOrg() {
+    const supervisors = S.staffState.filter((staff) => staff.isSupervisor);
+    const directsToPlayer = S.staffState.filter((staff) => !staff.isSupervisor && staff.managerId === 'player');
+    const managerGroups = supervisors.map((supervisor) => `<section class="org-group"><div class="org-group-title">${supervisor.name} (${directReports(supervisor.id).length}/${getSupervisorCapacity()})</div><div class="staff-grid small">${directReports(supervisor.id).map((staff) => staffCard(staff, supervisor.name)).join('') || '<div class="open-slot">Open under supervisor</div>'}</div></section>`).join('');
+    document.getElementById('org-summary').textContent = orgSummary();
+    document.getElementById('org-chart').innerHTML = `<section class="org-group player-group"><div class="player-node"><div><div class="player-title">You</div><div class="player-role">${currentCareer().title}</div></div><div class="player-mini">${directsToPlayer.length} direct reports</div></div><div class="staff-grid">${directsToPlayer.map((staff) => staffCard(staff, 'You')).join('') || '<div class="open-slot">No direct reports</div>'}</div></section>${supervisors.length ? managerGroups : '<section class="org-group"><div class="org-group-title">Supervisors</div><div class="open-slot">No supervisors yet. Promote one after your first promotion.</div></section>'}`;
+    document.getElementById('candidate-slate').innerHTML = S.candidateSlate.length ? S.candidateSlate.map((candidate) => `<button class="candidate-card ${S.selectedCandidateId === candidate.id ? 'selected' : ''}" data-candidate-id="${candidate.id}"><div class="staff-top"><span class="staff-emoji">${candidate.emoji}</span><span class="staff-name">${candidate.name}</span></div><div class="staff-role">${candidate.role}</div><div class="staff-meta">${fmtMoney(candidate.annualSalary)} • ${candidate.flags.join(' / ')}</div></button>`).join('') : '<div class="open-slot">No candidate slate this week.</div>';
+    const staff = selectedStaff();
+    document.getElementById('staff-detail').innerHTML = staff ? `<div class="detail-head"><div><div class="detail-name">${staff.name}</div><div class="detail-role">${staff.role}</div></div><span class="badge ${staff.isSupervisor ? 'purple' : ''}">${staff.isSupervisor ? 'Supervisor' : 'Employee'}</span></div><div class="detail-grid"><div><span>Competence</span><strong>${staff.competence}</strong></div><div><span>Morale</span><strong>${staff.morale}</strong></div><div><span>Burnout</span><strong>${staff.burnout}</strong></div><div><span>Loyalty</span><strong>${staff.loyalty}</strong></div><div><span>Salary</span><strong>${fmtMoney(staff.annualSalary)}</strong></div><div><span>Manager Rel.</span><strong>${staff.managerRelationship}</strong></div></div><div class="detail-flags">${staff.flags.map((flag) => `<span class="tag">${flag}</span>`).join('')}</div><p class="detail-note">${staff.notes}</p>` : '<div class="empty-state">Select an employee to inspect them.</div>';
+  }
+
+  function renderBoss() {
+    const boss = currentBoss();
+    document.getElementById('boss-name').textContent = boss.name;
+    document.getElementById('boss-title').textContent = boss.title;
+    document.getElementById('boss-mood').textContent = S.bossState.mood;
+    document.getElementById('boss-ask').textContent = S.bossState.ask;
+    document.getElementById('boss-explain').textContent = S.bossState.needsExplanation ? 'You owe leadership an explanation this week.' : 'Leadership is distracted by someone else for the moment.';
+    document.getElementById('political-moves').innerHTML = S.bossState.availableMoves.map((id) => {
+      const move = POLITICAL_MOVES.find((item) => item.id === id);
+      const disabled = S.weeklyFlags.usedPoliticalMove || S.actionPoints < move.apCost;
+      return `<button class="move-card" data-move-id="${move.id}" ${disabled ? 'disabled' : ''}><span class="action-icon">${move.icon}</span><span class="action-name">${move.label}</span><span class="action-cost">${move.apCost} AP</span><span class="action-desc">${S.weeklyFlags.usedPoliticalMove ? 'Political move already spent.' : move.description}</span></button>`;
+    }).join('');
+    document.getElementById('history-log').innerHTML = S.weekLog.map((entry) => `<li class="${entry.tone}">Week ${entry.week}: ${entry.text}</li>`).join('');
+  }
+
+  function renderResolve() {
+    const pending = unresolvedMandatory();
+    document.getElementById('resolve-note').textContent = pending ? `${pending} mandatory inbox decisions still unresolved.` : 'Week is ready to resolve. If this goes badly, it will still be your fault.';
+    const button = document.getElementById('btn-end-week');
+    button.disabled = pending > 0;
+    button.textContent = `Resolve Week ${S.week}`;
+  }
+
+  function renderAll() {
+    renderHeader();
+    renderSummary();
+    renderInbox();
+    renderActions();
+    renderOrg();
+    renderBoss();
+    renderResolve();
+  }
+  function onDelegatedClick(event) {
+    const action = event.target.closest('[data-action-id]');
+    if (action) return performAction(action.dataset.actionId);
+    const move = event.target.closest('[data-move-id]');
+    if (move) return performPoliticalMove(move.dataset.moveId);
+    const choice = event.target.closest('[data-event-id]');
+    if (choice) return resolveInboxChoice(choice.dataset.eventId, choice.dataset.choiceId);
+    const staff = event.target.closest('[data-staff-id]');
+    if (staff) {
+      S.selectedStaffId = staff.dataset.staffId;
+      return void renderAll();
+    }
+    const candidate = event.target.closest('[data-candidate-id]');
+    if (candidate) {
+      S.selectedCandidateId = candidate.dataset.candidateId;
+      renderAll();
+    }
+  }
+
+  function bindEvents() {
+    document.body.addEventListener('click', onDelegatedClick);
+    document.getElementById('btn-end-week').addEventListener('click', endWeek);
+    document.getElementById('btn-save').addEventListener('click', () => saveGame('Saved'));
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      if (!window.confirm('Reset the strategy sim and start over as Service Desk Supervisor?')) return;
+      localStorage.removeItem(SAVE_KEY);
+      S = buildFreshState();
+      prepareWeek(true);
+      saveGame('Reset');
+      renderAll();
+    });
+    document.getElementById('btn-help').addEventListener('click', () => document.getElementById('help-modal').classList.remove('hidden'));
+    document.getElementById('close-help').addEventListener('click', () => document.getElementById('help-modal').classList.add('hidden'));
+    document.getElementById('btn-restart-fired').addEventListener('click', restartAfterFiring);
+    document.getElementById('btn-sound').addEventListener('click', () => {
+      const enabled = SFX.toggle ? SFX.toggle() : true;
+      document.getElementById('btn-sound').textContent = enabled ? '🔊' : '🔇';
+    });
+    window.addEventListener('beforeunload', () => saveGame('Saved'));
+  }
+
+  function init() {
+    const loaded = loadGame();
+    S = loaded || buildFreshState();
+    if (loaded) {
+      S.weeklyModifiers = Array.isArray(S.weeklyModifiers) ? S.weeklyModifiers : [];
+      S.weeklyActionsTaken = Array.isArray(S.weeklyActionsTaken) ? S.weeklyActionsTaken : [];
+      S.pendingConsequences = Array.isArray(S.pendingConsequences) ? S.pendingConsequences : [];
+      S.weeklyInbox = Array.isArray(S.weeklyInbox) ? S.weeklyInbox : [];
+      S.candidateSlate = Array.isArray(S.candidateSlate) ? S.candidateSlate : [];
+      S.staffState = Array.isArray(S.staffState) ? S.staffState : [];
+      S.weeklyFlags = S.weeklyFlags || { usedPoliticalMove: false, freezeHiring: false, reviewRequested: false, midnightOil: false };
+      S.bossState = S.bossState || buildBossState();
+      rebalanceReports();
+      recomputeMorale();
+      if (S.isFired) {
+        document.getElementById('fired-reason').textContent = S.lastFiredReason || 'Leadership has decided your story no longer aligns with the org.';
+        document.getElementById('fired-modal').classList.remove('hidden');
+      }
+    } else {
+      prepareWeek(true);
+    }
+    bindEvents();
+    renderAll();
+    saveGame('Saved');
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
+  else init();
 })();

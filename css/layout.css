@@ -1,9 +1,9 @@
 /* ============================================================
-   layout.css — One-screen layout: no page scroll, internal scrolls only
+   layout.css - Single-screen strategy dashboard
    ============================================================ */
 
-/* ── Make everything fit 100vh ── */
-html, body {
+html,
+body {
   height: 100%;
   overflow: hidden;
 }
@@ -14,279 +14,167 @@ body {
   margin: 0;
 }
 
-/* ── Header ── */
 #game-header {
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1.2fr 0.95fr 0.85fr 0.9fr auto;
   gap: 16px;
-  padding: 8px 20px;
-  background: rgba(6, 4, 20, 0.95);
-  backdrop-filter: blur(16px);
+  align-items: center;
+  padding: 14px 18px;
+  background: rgba(6, 4, 20, 0.96);
   border-bottom: 1px solid var(--panel-border);
-  box-shadow: 0 2px 40px rgba(0,0,0,0.5);
-  z-index: 100;
-  min-height: 50px;
+  box-shadow: 0 2px 40px rgba(0, 0, 0, 0.45);
 }
 
-.game-logo {
-  font-weight: 800;
-  font-size: 1rem;
-  color: var(--gold);
-  letter-spacing: -0.01em;
-  white-space: nowrap;
+.header-brand,
+.header-status,
+.header-comp,
+.header-pressure,
+.header-actions {
+  min-width: 0;
 }
 
-.header-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  flex: 1;
+.header-status,
+.header-comp,
+.header-pressure {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
 
-.career-title-label {
-  font-size: 0.68rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.career-title-value {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--purple-light);
-}
-
-.career-progress-wrap {
-  width: 160px;
-  height: 4px;
-  background: rgba(255,255,255,0.08);
-  border-radius: 99px;
-  overflow: hidden;
-}
-
-.career-progress-bar {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--purple), var(--gold));
-  border-radius: 99px;
-  transition: width 0.5s ease;
-}
-
-.header-right {
+.header-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 
-.save-indicator {
-  font-size: 0.74rem;
-  color: var(--green);
-  opacity: 0.7;
-}
-
-.btn-hdr {
-  padding: 5px 12px;
-  border-radius: 7px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  background: rgba(255,255,255,0.08);
-  color: var(--text);
-  border: 1px solid var(--panel-border);
-  transition: background var(--transition);
-}
-.btn-hdr:hover { background: rgba(255,255,255,0.15); }
-.btn-hdr.btn-danger { color: var(--red); }
-.btn-hdr.btn-danger:hover { background: rgba(248,113,113,0.15); }
-
-/* ── Incident Banner ── */
-.incident-banner {
-  flex-shrink: 0;
-  background: linear-gradient(90deg, rgba(127,29,29,0.82), rgba(154,52,18,0.72));
-  border-bottom: 1px solid rgba(248,113,113,0.45);
-  padding: 10px 20px;
-  box-shadow: inset 0 -1px 0 rgba(255,255,255,0.05), 0 10px 24px rgba(0,0,0,0.25);
-}
-
-.incident-inner {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-.incident-icon { font-size: 1.35rem; }
-.incident-copy { flex: 1; min-width: 0; }
-.incident-topline { display:flex; align-items:center; gap:10px; margin-bottom: 2px; }
-.incident-severity {
-  display:inline-flex;
-  align-items:center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.14);
-  border: 1px solid rgba(255,255,255,0.18);
-  color: #fff;
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-.incident-title { font-size: 0.92rem; font-weight: 800; color: #fff; }
-.incident-text { font-weight: 600; color: rgba(255,255,255,0.92); font-size: 0.88rem; }
-.incident-meta { margin-top: 3px; color: rgba(255,255,255,0.75); font-size: 0.76rem; }
-.incident-timer { font-family: var(--font-mono); color: #fff; font-weight: 800; font-size: 1rem; min-width: 44px; text-align: right; }
-
-.btn-incident {
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-weight: 800;
-  font-size: 0.82rem;
-  background: linear-gradient(135deg, #ef4444, #f97316);
-  color: #fff;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  transition: transform var(--transition), filter var(--transition), box-shadow var(--transition);
-  white-space: nowrap;
-  box-shadow: 0 8px 20px rgba(239,68,68,0.28);
-}
-.btn-incident:hover { transform: scale(1.04); filter: brightness(1.08); box-shadow: 0 10px 24px rgba(249,115,22,0.35); }
-
-/* ── Main Grid — fills remaining vertical space ── */
 #game-main {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 270px 1fr;
-  gap: 10px;
-  padding: 8px 14px;
+  grid-template-columns: minmax(320px, 1.02fr) minmax(340px, 0.98fr) minmax(420px, 1.2fr);
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    'summary summary summary'
+    'inbox actions org'
+    'boss resolve org';
+  gap: 14px;
+  padding: 14px;
   overflow: hidden;
-  align-items: stretch;
 }
 
-/* ── Panel base ── */
+.summary-panel { grid-area: summary; }
+.inbox-panel { grid-area: inbox; }
+.actions-panel { grid-area: actions; }
+.org-panel { grid-area: org; }
+.boss-panel { grid-area: boss; }
+.resolve-panel { grid-area: resolve; }
+
 .panel {
-  background: var(--panel-bg);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-lg);
-  padding: 12px;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
-  margin-bottom: 6px;
-}
-.panel:last-child { margin-bottom: 0; }
-
-/* ── Left Panel — internally scrollable ── */
-#left-panel {
-  overflow-y: auto;
-  overflow-x: hidden;
   min-height: 0;
-  scrollbar-width: thin;
-  scrollbar-color: var(--purple) transparent;
-}
-
-/* ── Center Panel — flex column, tab pane scrolls ── */
-#center-panel {
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-
-/* ── Tabs ── */
-.tab-nav {
-  flex-shrink: 0;
-  display: flex;
-  gap: 3px;
-  background: rgba(0,0,0,0.3);
-  border-radius: var(--radius-md);
-  padding: 4px;
-  margin-bottom: 10px;
-  border: 1px solid var(--panel-border);
-}
-
-.tab-btn {
-  flex: 1;
-  padding: 8px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text-dim);
-  background: transparent;
-  transition: all var(--transition);
-  white-space: nowrap;
-}
-
-.tab-btn:hover { color: var(--text); background: rgba(255,255,255,0.06); }
-
-.tab-btn.active {
-  background: linear-gradient(135deg, rgba(124,92,252,0.35), rgba(59,130,246,0.2));
-  color: var(--text);
-  box-shadow: 0 2px 12px rgba(124,92,252,0.3);
-  border: 1px solid rgba(124,92,252,0.4);
-}
-
-/* Tab pane — fills remaining space, scrolls internally */
-.tab-pane {
-  display: none;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-lg);
-  padding: 18px;
-  backdrop-filter: blur(12px);
-  box-shadow: 0 10px 40px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
-  scrollbar-width: thin;
-  scrollbar-color: var(--purple) transparent;
+  padding: 14px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
-.tab-pane.active { display: flex; flex-direction: column; }
 
-.tab-header { margin-bottom: 16px; flex-shrink: 0; }
-.tab-desc { font-size: 0.84rem; margin-top: 5px; }
+.inbox-panel,
+.actions-panel,
+.org-panel,
+.boss-panel {
+  overflow: hidden;
+}
 
-/* ── Toast Area — zero layout height, fixed render position ── */
+.inbox-list,
+.action-grid,
+.org-chart,
+.candidate-slate,
+.staff-detail,
+.history-wrap,
+.move-grid {
+  min-height: 0;
+}
+
 .toast-area {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
-  display: flex;
-  flex-direction: column-reverse; /* newest toast on top, avoids pushing up */
-  gap: 6px;
+  right: 18px;
+  bottom: 18px;
   z-index: 999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   pointer-events: none;
-  align-items: flex-end;
-  /* Zero out flex item height so body flex column is unaffected */
-  height: 0;
-  flex-shrink: 0;
-  overflow: visible;
 }
 
-/* ── Float layer — same zero-height trick ── */
-.float-layer {
+.modal {
   position: fixed;
   inset: 0;
-  pointer-events: none;
-  z-index: 998;
-  /* Zero height in flex flow */
-  height: 0;
-  flex-shrink: 0;
-  overflow: visible;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
 }
 
-/* ── Responsive ── */
-@media (max-width: 900px) {
-  html, body { height: auto; overflow: auto; }
-  #game-main {
-    grid-template-columns: 1fr;
-    padding: 10px;
-    overflow: visible;
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 2, 14, 0.8);
+  backdrop-filter: blur(8px);
+}
+
+.modal-panel {
+  position: relative;
+  z-index: 1;
+  width: min(640px, calc(100% - 2rem));
+  padding: 22px;
+  border-radius: 20px;
+  background: linear-gradient(155deg, rgba(23, 18, 59, 0.98), rgba(17, 26, 59, 0.97));
+  border: 1px solid rgba(167, 139, 250, 0.32);
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.55);
+}
+
+@media (max-width: 1500px) {
+  #game-header {
+    grid-template-columns: 1.2fr 1fr 1fr auto;
+    grid-template-areas:
+      'brand status comp actions'
+      'brand pressure pressure actions';
   }
-  #left-panel { overflow: visible; }
-  #center-panel { min-height: 500px; }
-  .tab-pane { min-height: 400px; }
-  .header-center { display: none; }
+
+  .header-brand { grid-area: brand; }
+  .header-status { grid-area: status; }
+  .header-comp { grid-area: comp; }
+  .header-pressure { grid-area: pressure; }
+  .header-actions { grid-area: actions; }
+}
+
+@media (max-width: 1240px) {
+  html,
+  body {
+    overflow: auto;
+  }
+
+  #game-main {
+    height: auto;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    grid-template-areas:
+      'summary'
+      'inbox'
+      'actions'
+      'org'
+      'boss'
+      'resolve';
+  }
+
+  .org-panel,
+  .actions-panel,
+  .inbox-panel,
+  .boss-panel {
+    min-height: 420px;
+  }
 }

@@ -1,258 +1,356 @@
 /* ============================================================
-   constants.js — All static game data
+   constants.js - Strategy sim data
    ============================================================ */
 
 window.GAME_DATA = (() => {
+  const STAFF_POOL = window.RECRUIT_POOL || [];
 
-  // ── Career Tiers (Expanded 14-tier pyramid) ──
-  // The XP required scales steeply so that reaching CIO is a multi-hour commitment.
   const CAREER = [
-    { id: 0, title: "Analyst I",              xpRequired: 1_000,          prestigeBonus: 1.0,   icon: "🔋" },
-    { id: 1, title: "Analyst II",             xpRequired: 3_500,          prestigeBonus: 1.15,  icon: "🔧" },
-    { id: 2, title: "Analyst III",            xpRequired: 10_000,         prestigeBonus: 1.35,  icon: "⚙️" },
-    { id: 3, title: "Analyst IV",             xpRequired: 25_000,         prestigeBonus: 1.6,   icon: "🛠️" },
-    { id: 4, title: "Analyst V",              xpRequired: 60_000,         prestigeBonus: 1.9,   icon: "🖥️" },
-    { id: 5, title: "Team Lead",              xpRequired: 150_000,        prestigeBonus: 2.25,  icon: "👔" },
-    { id: 6, title: "Manager",                xpRequired: 400_000,        prestigeBonus: 2.7,   icon: "📊" },
-    { id: 7, title: "Senior Manager",         xpRequired: 1_000_000,      prestigeBonus: 3.25,  icon: "💼" },
-    { id: 8, title: "Director",               xpRequired: 2_500_000,      prestigeBonus: 3.9,   icon: "🏢" },
-    { id: 9, title: "Senior Director",        xpRequired: 6_000_000,      prestigeBonus: 4.65,  icon: "🏙️" },
-    { id: 10,title: "Junior VP",              xpRequired: 15_000_000,     prestigeBonus: 5.5,   icon: "📈" },
-    { id: 11,title: "VP of Technology",       xpRequired: 35_000_000,     prestigeBonus: 6.5,   icon: "🚀" },
-    { id: 12,title: "Senior VP",              xpRequired: 80_000_000,     prestigeBonus: 7.75,  icon: "💎" },
-    { id: 13,title: "CIO",                    xpRequired: Infinity,       prestigeBonus: 10.0,  icon: "👑" },
+    { id: 0, title: 'Service Desk Supervisor', hourlyRate: 38, annualSalary: 79040, weeklyAP: 5, headcount: 5, supervisorSlots: 0, promotionTarget: 58, orgScale: 'Support Pod' },
+    { id: 1, title: 'Senior Supervisor', hourlyRate: 46, annualSalary: 95680, weeklyAP: 5, headcount: 8, supervisorSlots: 1, promotionTarget: 61, orgScale: 'Escalation Floor' },
+    { id: 2, title: 'Incident Manager', hourlyRate: 58, annualSalary: 120640, weeklyAP: 5, headcount: 12, supervisorSlots: 2, promotionTarget: 64, orgScale: 'Incident Cluster' },
+    { id: 3, title: 'Ops Manager', hourlyRate: 72, annualSalary: 149760, weeklyAP: 5, headcount: 18, supervisorSlots: 3, promotionTarget: 67, orgScale: 'Operations Wing' },
+    { id: 4, title: 'Senior Ops Manager', hourlyRate: 88, annualSalary: 183040, weeklyAP: 5, headcount: 26, supervisorSlots: 4, promotionTarget: 70, orgScale: 'Regional Command Floor' },
+    { id: 5, title: 'Director', hourlyRate: 108, annualSalary: 224640, weeklyAP: 6, headcount: 38, supervisorSlots: 6, promotionTarget: 72, orgScale: 'Shared Services Tower' },
+    { id: 6, title: 'Senior Director', hourlyRate: 132, annualSalary: 274560, weeklyAP: 6, headcount: 52, supervisorSlots: 8, promotionTarget: 74, orgScale: 'Transformation District' },
+    { id: 7, title: 'VP', hourlyRate: 168, annualSalary: 349440, weeklyAP: 7, headcount: 70, supervisorSlots: 11, promotionTarget: 76, orgScale: 'Platform Region' },
+    { id: 8, title: 'SVP', hourlyRate: 215, annualSalary: 447200, weeklyAP: 7, headcount: 96, supervisorSlots: 15, promotionTarget: 79, orgScale: 'Global Ops Megablock' },
+    { id: 9, title: 'CIO', hourlyRate: 285, annualSalary: 592800, weeklyAP: 8, headcount: 140, supervisorSlots: 20, promotionTarget: 999, orgScale: 'Enterprise Gravity Well' },
   ];
 
-  // ── Upgrades ──
-  const UPGRADES = [
-    { id: "macros",      name: "Macro Library",            icon: "⌨️", desc: "Canned responses for common issues. Fingers fly faster.",               baseCost: 50,        perClickBonus: 1,  costScale: 1.18, tier: 1 },
-    { id: "coffee",      name: "Bottomless Coffee Pot",    icon: "☕", desc: "Infinite caffeine. Infinite focus. Infinite tickets.",                  baseCost: 150,       perSecBonus: 1.5,  costScale: 1.18, tier: 1 },
-    { id: "dual_monitor",name: "Dual Monitors",            icon: "🖥️", desc: "Double the screen, double the throughput.",                             baseCost: 400,       perClickBonus: 3,  perSecBonus: 2,  costScale: 1.18, tier: 1 },
-    { id: "kb_shortcut", name: "KB Article Shortcuts",     icon: "📋", desc: "Pre-built knowledge base links. One click, solved.",                   baseCost: 900,       perClickBonus: 6,  costScale: 1.18, tier: 2 },
-    { id: "ai_triage",   name: "AI Triage Assistant",      icon: "🤖", desc: "AI sorts P1–P3's, putting Chuck on escalations only.",                  baseCost: 2_500,     perSecBonus: 12,   costScale: 1.18, tier: 2 },
-    { id: "automation",  name: "Automation Playbooks",     icon: "📜", desc: "Self-healing scripts resolve incidents before users notice.",           baseCost: 6_000,     perSecBonus: 30,   perClickBonus: 5, costScale: 1.18, tier: 2 },
-    { id: "war_room",    name: "War Room Setup",           icon: "🎯", desc: "Dedicated incident bridge. All hands, all fast.",                      baseCost: 15_000,    perSecBonus: 75,   costScale: 1.18, tier: 3 },
-    { id: "monitoring",  name: "Proactive Monitoring Suite",icon:"📡", desc: "Catch fires before they start. MTTD drops to zero.",                   baseCost: 40_000,    perSecBonus: 180,  perClickBonus: 10, costScale: 1.18, tier: 3 },
-    { id: "chatbot",     name: "Self-Service Chatbot",     icon: "💬", desc: "Deflects 40% of tickets before they touch human hands.",               baseCost: 100_000,   perSecBonus: 450,  costScale: 1.18, tier: 3 },
-    { id: "cloud_auto",  name: "Cloud Automation Pipeline",icon: "☁️", desc: "Serverless functions handle provisioning around the clock.",            baseCost: 300_000,   perSecBonus: 1_200, perClickBonus: 25, costScale: 1.18, tier: 4 },
-    { id: "ai_ops",      name: "AIOps Platform",           icon: "🧠", desc: "ML correlates events across 500 systems simultaneously.",              baseCost: 1_000_000, perSecBonus: 4_000, costScale: 1.18, tier: 4 },
-    { id: "quantum_sla", name: "Quantum SLA Engine",       icon: "⚡", desc: "Predictive SLA breach prevention. Customers never know it happened.",  baseCost: 5_000_000, perSecBonus: 15_000, perClickBonus: 100, costScale: 1.18, tier: 4 },
-  ];
-
-  // ── Squad Heroes (with skills) ──
-  const HEROES = window.RECRUIT_POOL || [];
-
-  // ── Skill Tree ──
-  const SKILLS = [
-    { id: "fast_fingers", name: "Fast Fingers",      icon: "✋", cost: 1, row: 0, col: 0, requires: [],           desc: "Clicks produce +2 tickets each.",          effect: { perClick: 2 } },
-    { id: "speed_read",   name: "Speed Reader",      icon: "👁️", cost: 1, row: 0, col: 1, requires: [],           desc: "+20% auto-resolve speed.",                 effect: { perSecMult: 0.20 } },
-    { id: "coffee_drip",  name: "Coffee Drip",       icon: "☕", cost: 1, row: 0, col: 2, requires: [],           desc: "+0.5 tickets/sec passive.",                effect: { perSec: 0.5 } },
-    { id: "macro_god",    name: "Macro God",         icon: "⌨️", cost: 2, row: 1, col: 0, requires: ["fast_fingers"], desc: "+5 per click flat.",                   effect: { perClick: 5 } },
-    { id: "surge",        name: "Surge Mode",        icon: "⚡", cost: 2, row: 1, col: 1, requires: ["speed_read"], desc: "Combo meter lasts 50% longer.",          effect: { comboTime: 1.5 } },
-    { id: "xp_boost",     name: "XP Accelerator",   icon: "📈", cost: 2, row: 1, col: 2, requires: ["coffee_drip"], desc: "Earn +30% XP per ticket.",              effect: { xpMult: 0.30 } },
-    { id: "crit_click",   name: "Critical Click",   icon: "💥", cost: 3, row: 2, col: 0, requires: ["macro_god"],  desc: "5% chance of 10× click bonus.",          effect: { critChance: 0.05, critMult: 10 } },
-    { id: "dispatch",     name: "Dispatch Protocol", icon: "📡", cost: 3, row: 2, col: 1, requires: ["surge"],     desc: "Squad produces +25% more tickets.",      effect: { squadMult: 0.25 } },
-    { id: "overtime",     name: "Overtime Mode",     icon: "🌙", cost: 3, row: 2, col: 2, requires: ["xp_boost"],  desc: "Offline income tracked up to 12 hours.", effect: { offlineHours: 12 } },
-    { id: "automation_ai",name: "Deep Automation",  icon: "🤖", cost: 4, row: 3, col: 0, requires: ["crit_click","dispatch"], desc: "+100 tickets/sec flat.",       effect: { perSec: 100 } },
-    { id: "prestige_plus",name: "Prestige Amplifier",icon:"🏆", cost: 4, row: 3, col: 1, requires: ["dispatch","overtime"],   desc: "Each promotion bonus ×1.5.",  effect: { prestigeMult: 1.5 } },
-    { id: "cio_vision",   name: "CIO Vision",       icon: "👁️‍🗨️", cost: 5, row: 3, col: 2, requires: ["automation_ai","prestige_plus"], desc: "All production ×2.", effect: { globalMult: 2.0 } },
-  ];
-
-  const OFFICE_UPGRADES = [
-    { id: "better_chair", icon: "🪑", name: "Better Chair", desc: "Chuck's lumbar support finally enters the chat.", effectText: "+3 tickets/click forever", effect: { perClick: 3 } },
-    { id: "espresso_machine", icon: "☕", name: "Espresso Machine", desc: "Turns existential dread into throughput.", effectText: "+8 tickets/sec forever", effect: { perSec: 8 } },
-    { id: "dual_monitors_office", icon: "🖥️", name: "Executive Monitors", desc: "More dashboards. More confidence. Same root cause.", effectText: "+12% click power forever", effect: { clickMult: 0.12 } },
-    { id: "private_office", icon: "🚪", name: "Private Office", desc: "Less interruption, more quiet plotting.", effectText: "+15% all production forever", effect: { globalMult: 0.15 } },
-    { id: "executive_assistant", icon: "📅", name: "Executive Assistant", desc: "Filters nonsense before it becomes your problem.", effectText: "+20% XP forever", effect: { xpMult: 0.20 } },
-    { id: "budget_authority", icon: "💳", name: "Budget Authority", desc: "Miraculously, crises resolve faster when money appears.", effectText: "+25% incident rewards forever", effect: { incidentRewardMult: 0.25 } },
-  ];
-
-  // ── Incidents — 18 total, from clerical to highly technical ──
-  const INCIDENTS = [
-    // ── Highly Technical ──────────────────────────────────────────
+  const BOSS_ARCHETYPES = [
     {
-      id: "srv_down",   icon: "🔴", category: "critical",
-      title: "Production Server Down!",
-      text: "PROD is on fire. 10,000 users can't connect. Every second costs $5,000.",
-      requiredSkills: ["Highly Technical", "Infrastructure"],
-      rewardMult: 8, timeLimit: 30,
+      id: 'deck_addict',
+      name: 'Pat Caldwell',
+      title: 'VP, Strategic Alignment',
+      temperament: 'Wants slides, not truth.',
+      moods: ['performatively calm', 'asking for a tighter narrative', 'already drafting a scapegoat memo'],
+      asks: [
+        'Make the queue look intentional before the steering committee sees it.',
+        'Translate operational pain into three bullets and a North Star arrow.',
+        'Keep the board from learning what the word backlog means.',
+      ],
     },
     {
-      id: "breach",     icon: "🚨", category: "security",
-      title: "Security Breach Detected",
-      text: "Unknown actor inside the perimeter. Lateral movement detected across 3 subnets.",
-      requiredSkills: ["Security Pro", "Zero-Day"],
-      rewardMult: 10, timeLimit: 25,
+      id: 'finops_monk',
+      name: 'Dana Mercer',
+      title: 'Director, FinOps Governance',
+      temperament: 'Treats every invoice like a personal betrayal.',
+      moods: ['tracking spend in real time', 'weaponizing a spreadsheet', 'smelling headcount'],
+      asks: [
+        'Prove your team can do more with less before Finance does it for you.',
+        'Reduce cost without changing service, staffing, or reality.',
+        'Explain overtime without using the phrase under-resourced.',
+      ],
     },
     {
-      id: "db_lock",    icon: "🗄️", category: "database",
-      title: "Database Deadlock",
-      text: "500 transactions stuck. The order queue is frozen. Finance is unhinged.",
-      requiredSkills: ["Database Expert", "Highly Technical"],
-      rewardMult: 6, timeLimit: 35,
+      id: 'ai_prophet',
+      name: 'Morgan Pike',
+      title: 'SVP, Agentic Transformation',
+      temperament: 'Believes AI can replace process and weather.',
+      moods: ['drunk on buzzwords', 'demanding an AI narrative', 'one keynote away from a reorg'],
+      asks: [
+        'Show visible momentum on the agentic service desk initiative.',
+        'Frame debt as temporary friction on the AI journey.',
+        'Find a way to say RAG and governance in the same sentence.',
+      ],
     },
     {
-      id: "ddos",       icon: "🌊", category: "network",
-      title: "DDoS Attack",
-      text: "Inbound traffic is 50× normal. The load balancer is melting.",
-      requiredSkills: ["Network Expert", "Security Pro"],
-      rewardMult: 9, timeLimit: 28,
-    },
-    {
-      id: "dns",        icon: "📡", category: "network",
-      title: "DNS Failure",
-      text: "Half the internet thinks you don't exist. DNS propagation is chaos.",
-      requiredSkills: ["Network Expert", "Infrastructure"],
-      rewardMult: 7, timeLimit: 32,
-    },
-    {
-      id: "k8s_melt",   icon: "⚓", category: "devops",
-      title: "Kubernetes Meltdown",
-      text: "Pods are crash-looping across all regions. CrashLoopBackOff everywhere.",
-      requiredSkills: ["DevOps", "Highly Technical"],
-      rewardMult: 9, timeLimit: 30,
-    },
-    {
-      id: "ransomware", icon: "💀", category: "security",
-      title: "Ransomware Attack",
-      text: "Files are encrypting on 200 workstations. Attacker wants 5 BTC. Isolate NOW.",
-      requiredSkills: ["Security Pro", "Penetration Testing"],
-      rewardMult: 12, timeLimit: 22,
-    },
-    {
-      id: "db_corrupt", icon: "⚠️", category: "database",
-      title: "Database Corruption",
-      text: "Indexes are corrupt after a botched migration. 3 days of data at risk.",
-      requiredSkills: ["Database Expert", "Query Optimization"],
-      rewardMult: 11, timeLimit: 35,
-    },
-    {
-      id: "cloud_bill", icon: "💸", category: "cloud",
-      title: "Cloud Cost Explosion",
-      text: "AWS bill jumped $80K overnight. A runaway Lambda is burning money.",
-      requiredSkills: ["Cloud Native", "Highly Technical"],
-      rewardMult: 7, timeLimit: 40,
-    },
-    {
-      id: "api_limit",  icon: "🔌", category: "devops",
-      title: "API Gateway Meltdown",
-      text: "Rate limits hit. 1,200 downstream services timing out. SLA breach in 5 min.",
-      requiredSkills: ["Highly Technical", "Cloud Native"],
-      rewardMult: 8, timeLimit: 28,
-    },
-    {
-      id: "cert_exp",   icon: "📜", category: "security",
-      title: "SSL Certificate Expired",
-      text: "Browsers red-flagging the whole site. Customer trust is evaporating.",
-      requiredSkills: ["Security Pro", "Infrastructure"],
-      rewardMult: 6, timeLimit: 30,
-    },
-    // ── Network / Mid-tier ─────────────────────────────────────────
-    {
-      id: "vpn_fail",   icon: "🔑", category: "network",
-      title: "VPN Outage",
-      text: "2,000 remote workers offline. CEO can't connect and is calling personally.",
-      requiredSkills: ["Network Expert", "Infrastructure"],
-      rewardMult: 5, timeLimit: 40,
-    },
-    {
-      id: "wifi_conf",  icon: "📶", category: "network",
-      title: "Conference Room WiFi Down",
-      text: "Board presentation in 10 minutes. WiFi dead in every conference room.",
-      requiredSkills: ["Network Expert", "Diagnostics"],
-      rewardMult: 3, timeLimit: 45,
-    },
-    {
-      id: "phishing",   icon: "🎣", category: "security",
-      title: "Phishing Campaign Live",
-      text: "300 users clicked a malicious link. Credentials may be compromised.",
-      requiredSkills: ["Security Pro", "Customer Service"],
-      rewardMult: 6, timeLimit: 35,
-    },
-    {
-      id: "backup",     icon: "💾", category: "critical",
-      title: "Backup Failure",
-      text: "3 days of backups silent. DR audit is next week. Panic is setting in.",
-      requiredSkills: ["Highly Technical", "Infrastructure"],
-      rewardMult: 5, timeLimit: 45,
-    },
-    // ── Clerical / Mid-tier ────────────────────────────────────────
-    {
-      id: "pw_tsunami", icon: "🔑", category: "clerical",
-      title: "Password Reset Tsunami",
-      text: "Forced rotation hit 800 users at once. The help desk phone won't stop.",
-      requiredSkills: ["Clerical Savant", "Customer Service"],
-      rewardMult: 4, timeLimit: 50,
-    },
-    {
-      id: "compliance", icon: "📋", category: "clerical",
-      title: "Compliance Audit Surprise",
-      text: "Auditors arrived early. They want evidence for 120 controls by 3pm.",
-      requiredSkills: ["Compliance", "Documentation"],
-      rewardMult: 5, timeLimit: 45,
-    },
-    {
-      id: "printer",    icon: "🖨️", category: "clerical",
-      title: "Printer Apocalypse",
-      text: "Every printer on floor 3 decided today is a great day to stop working.",
-      requiredSkills: ["Clerical Savant", "Diagnostics"],
-      rewardMult: 2, timeLimit: 60,
+      id: 'audit_hawk',
+      name: 'Evelyn Shaw',
+      title: 'Chief Risk Liaison',
+      temperament: 'If it is not documented, it did not happen.',
+      moods: ['circling a control failure', 'looking for evidence', 'ready to make your week educational'],
+      asks: [
+        'Show me the control, the owner, and the timestamp.',
+        'I need proof, not vibes, that your org can survive an audit.',
+        'Assume I will read the appendix.',
+      ],
     },
   ];
 
-  // ── Achievements ──
-  const ACHIEVEMENTS = [
-    { id: "first_ticket", icon: "🎫", name: "First Ticket",        desc: "Resolve your first ticket.",          goal: 1,        stat: "lifetime",   reward: "🎯 +1 click power",      bonus: { perClick: 1 } },
-    { id: "century",      icon: "💯", name: "The Century",         desc: "Resolve 100 tickets.",                goal: 100,      stat: "lifetime",   reward: "⚡ +5% global speed",     bonus: { globalMult: 0.05 } },
-    { id: "kilo",         icon: "🎖️", name: "1K Hero",             desc: "Resolve 1,000 tickets.",             goal: 1_000,    stat: "lifetime",   reward: "⚡ +1.5 tickets/sec",    bonus: { perSec: 1.5 } },
-    { id: "tenk",         icon: "🥇", name: "10K Marathoner",      desc: "Resolve 10,000 tickets.",            goal: 10_000,   stat: "lifetime",   reward: "💥 +10% click power",    bonus: { clickMult: 0.10 } },
-    { id: "hundredk",     icon: "🏆", name: "100K Legend",         desc: "Resolve 100,000 tickets.",           goal: 100_000,  stat: "lifetime",   reward: "🚀 +20% all production",  bonus: { globalMult: 0.20 } },
-    { id: "million",      icon: "💎", name: "Millionaire",         desc: "Resolve 1,000,000 tickets.",         goal: 1_000_000,stat: "lifetime",   reward: "⭐ +50% all production",  bonus: { globalMult: 0.50 } },
-    { id: "squad_first",  icon: "👥", name: "First Recruit",       desc: "Hire your first squad member.",      goal: 1,        stat: "heroes",     reward: "📡 +10% squad speed",    bonus: { squadMult: 0.10 } },
-    { id: "full_squad",   icon: "🦸", name: "Full Squad",          desc: "Recruit all 9 heroes.",              goal: 9,        stat: "heroes",     reward: "🔥 +35% squad speed",    bonus: { squadMult: 0.35 } },
-    { id: "upgrade5",     icon: "🔧", name: "Upgrade Addict",      desc: "Purchase 5 upgrades.",               goal: 5,        stat: "upgrades",   reward: "🛒 +5% click power",     bonus: { clickMult: 0.05 } },
-    { id: "upgrade20",    icon: "🏭", name: "Automation King",     desc: "Purchase 20 upgrades.",              goal: 20,       stat: "upgrades",   reward: "🤖 +25% all production",  bonus: { globalMult: 0.25 } },
-    { id: "incident5",    icon: "🚒", name: "First Responder",     desc: "Resolve 5 incidents.",               goal: 5,        stat: "incidents",  reward: "🚨 +10 tickets/sec",     bonus: { perSec: 10 } },
-    { id: "incident25",   icon: "🦺", name: "Crisis Commander",    desc: "Resolve 25 incidents.",              goal: 25,       stat: "incidents",  reward: "💪 +25% all production",  bonus: { globalMult: 0.25 } },
-    { id: "dispatchpro",  icon: "📡", name: "Dispatch Pro",        desc: "Dispatch heroes to 10 incidents.",   goal: 10,       stat: "dispatches", reward: "🦸 +20% squad speed",    bonus: { squadMult: 0.20 } },
-    { id: "combo10",      icon: "🔥", name: "On Fire",             desc: "Reach a ×10 combo.",                goal: 10,       stat: "maxCombo",   reward: "⚡ +2 click power",      bonus: { perClick: 2 } },
-    { id: "combo50",      icon: "🌋", name: "Unstoppable",         desc: "Reach a ×50 combo.",                goal: 50,       stat: "maxCombo",   reward: "💥 +15% click power",    bonus: { clickMult: 0.15 } },
-    { id: "prestige1",    icon: "📗", name: "Moving On Up",        desc: "Earn your first promotion.",         goal: 1,        stat: "prestiges",  reward: "🏅 +10% prestige power",  bonus: { prestigeMult: 0.10 } },
-    { id: "prestige5",    icon: "📘", name: "Career Climber",      desc: "Earn 5 promotions.",                goal: 5,        stat: "prestiges",  reward: "🌟 +40% prestige power",  bonus: { prestigeMult: 0.40 } },
-    { id: "level10",      icon: "🏅", name: "Level Up!",           desc: "Reach level 10.",                   goal: 10,       stat: "level",      reward: "📈 +1 skill point",      bonus: { skillPoints: 1 } },
-    { id: "level25",      icon: "⭐", name: "Expert",              desc: "Reach level 25.",                   goal: 25,       stat: "level",      reward: "📈 +2 skill points",     bonus: { skillPoints: 2 } },
+  const WEEKLY_ACTIONS = [
+    { id: 'work_tickets', label: 'Work Tickets', icon: '🎫', apCost: 1, target: 'none', description: 'Reduce backlog directly. Nobody notices unless it fails.' },
+    { id: 'reporting', label: 'Reporting', icon: '📊', apCost: 1, target: 'none', description: 'Turn pain into executive-ready charts.' },
+    { id: 'budgeting', label: 'Budgeting', icon: '💸', apCost: 1, target: 'none', description: 'Protect budget health before Finance gets creative.' },
+    { id: 'meetings', label: 'Meetings', icon: '📅', apCost: 1, target: 'none', description: 'Perform alignment and absorb entropy.' },
+    { id: 'time_tracking', label: 'Time Tracking', icon: '⏱️', apCost: 1, target: 'none', description: 'Feed compliance. Starve your soul.' },
+    { id: 'one_on_one', label: '1:1s', icon: '🗣️', apCost: 1, target: 'staff', description: 'Repair one person before they update LinkedIn.' },
+    { id: 'approve_offer', label: 'Approve Offer', icon: '🧾', apCost: 2, target: 'candidate', description: 'Fill approved headcount from the HR slate.' },
+    { id: 'approve_raise', label: 'Approve Raise', icon: '💵', apCost: 1, target: 'staff', description: 'Stabilize retention by hurting budget health.' },
+    { id: 'promote_supervisor', label: 'Promote to Supervisor', icon: '📈', apCost: 2, target: 'staff', description: 'Trade one IC for one stressed-out manager.' },
+    { id: 'fire_employee', label: 'Fire Employee', icon: '🪓', apCost: 1, target: 'staff', description: 'Immediate budget relief, delayed morale damage.' },
+    { id: 'fire_supervisor', label: 'Fire Supervisor', icon: '🔥', apCost: 2, target: 'staff', description: 'Visible decisiveness, expensive disruption.' },
+    { id: 'ask_review', label: 'Ask for Review', icon: '🧠', apCost: 1, target: 'none', description: 'Force the promotion conversation onto the calendar.' },
   ];
 
-  const DIFFICULTY_MODES = [
-    {
-      id: "easy", name: "Easy", desc: "~1 hour to CIO",
-      incomeMultiplier: 1.8, xpMultiplier: 1.5,
-      upgradeCostMultiplier: 0.7, recruitCostMultiplier: 0.7,
-      heroLevelCostMultiplier: 0.8, careerScale: 0.5,
-      fireCostMultiplier: 0.5, badHireChance: 0.08,
-    },
-    {
-      id: "medium", name: "Medium", desc: "~5 hours to CIO",
-      incomeMultiplier: 1.0, xpMultiplier: 1.0,
-      upgradeCostMultiplier: 1.0, recruitCostMultiplier: 1.0,
-      heroLevelCostMultiplier: 1.0, careerScale: 1.0,
-      fireCostMultiplier: 0.7, badHireChance: 0.12,
-    },
-    {
-      id: "hard", name: "Hard", desc: "~10 hours to CIO",
-      incomeMultiplier: 0.6, xpMultiplier: 0.7,
-      upgradeCostMultiplier: 1.5, recruitCostMultiplier: 1.4,
-      heroLevelCostMultiplier: 1.6, careerScale: 2.0,
-      fireCostMultiplier: 1.0, badHireChance: 0.15,
-    },
-    {
-      id: "insane", name: "Maybe Try a Real Job?", desc: "~100 hours to CIO",
-      incomeMultiplier: 0.2, xpMultiplier: 0.3,
-      upgradeCostMultiplier: 3.0, recruitCostMultiplier: 2.5,
-      heroLevelCostMultiplier: 3.0, careerScale: 10.0,
-      fireCostMultiplier: 2.0, badHireChance: 0.20,
-    },
+  const POLITICAL_MOVES = [
+    { id: 'tell_truth', label: 'Tell the Truth', icon: '🧾', apCost: 1, description: 'Take the hit and reduce narrative debt.' },
+    { id: 'spin_boss', label: 'Spin to Boss', icon: '🎭', apCost: 1, description: 'Buy political capital now. Pay later.' },
+    { id: 'hide_backlog', label: 'Hide Backlog', icon: '🫥', apCost: 1, description: 'Reclassify unresolved work as platform stabilization.' },
+    { id: 'freeze_hiring', label: 'Freeze Hiring', icon: '🧊', apCost: 1, description: 'Finance loves it. The team does not.' },
+    { id: 'skip_time_tracking', label: 'Skip Time Tracking', icon: '🚫', apCost: 1, description: 'Steal capacity from compliance and call it agility.' },
+    { id: 'cancel_one_on_ones', label: 'Cancel 1:1s', icon: '📵', apCost: 1, description: 'Free time now. Burn trust later.' },
+    { id: 'blame_vendor', label: 'Blame Vendor', icon: '📡', apCost: 1, description: 'Works until the receipts surface.' },
+    { id: 'midnight_oil', label: 'Push Midnight Oil', icon: '🌙', apCost: 1, description: 'Crush this week at the cost of next month.' },
   ];
 
-  return { CAREER, UPGRADES, HEROES, SKILLS, OFFICE_UPGRADES, INCIDENTS, ACHIEVEMENTS, DIFFICULTY_MODES };
+  const CONSEQUENCES = {
+    hidden_backlog: { delayWeeks: 2, log: 'The hidden queue appears in an appendix nobody was supposed to read.', effects: { backlog: 10, politicalCapital: -9, narrativeDebt: 6 } },
+    frozen_hiring: { delayWeeks: 1, log: 'The hiring freeze lands as morale damage instead of discipline.', effects: { backlog: 7, morale: -8, politicalCapital: -3 } },
+    skipped_tracking: { delayWeeks: 1, log: 'Audit notices that your timesheets have entered an experimental phase.', effects: { compliance: -14, politicalCapital: -4, narrativeDebt: 5 } },
+    canceled_one_on_ones: { delayWeeks: 1, log: 'Silence from management gets interpreted correctly.', effects: { morale: -9, narrativeDebt: 4 } },
+    vendor_receipts: { delayWeeks: 2, log: 'The vendor forwards the email thread with your blame note attached.', effects: { politicalCapital: -12, narrativeDebt: 8, compliance: -3 } },
+    burnout_wave: { delayWeeks: 1, log: 'The overtime push lands as sickness and passive-aggressive PTO.', effects: { morale: -10, backlog: 6, narrativeDebt: 5 } },
+    truth_respect: { delayWeeks: 1, log: 'Somebody senior quietly notices that you gave a straight answer.', effects: { politicalCapital: 4, narrativeDebt: -4 } },
+    shadow_ai_blowback: { delayWeeks: 2, log: 'The shadow AI pilot hallucinates a process map and Audit wants a meeting.', effects: { compliance: -10, politicalCapital: -5, narrativeDebt: 7 } },
+  };
+
+  const EVENT_TEMPLATES = {
+    boss: [
+      {
+        id: 'boss_queue_story',
+        title: 'Boss Wants a Cleaner Queue Story',
+        summary: 'Monday steering committee. Same queue, new vocabulary.',
+        mandatory: true,
+        choices: [
+          { id: 'truth', label: 'Tell the truth', summary: 'Backlog is real and headcount is thin.', effects: { politicalCapital: -5, compliance: 3, narrativeDebt: -5, promotionPressure: 4 }, consequence: 'truth_respect' },
+          { id: 'soften', label: 'Soften the truth', summary: 'Rename the backlog and pray nobody asks for raw numbers.', effects: { politicalCapital: 5, narrativeDebt: 6, compliance: -1 } },
+          { id: 'hide', label: 'Hide backlog', summary: 'Bury low-priority work in a platform stabilization bucket.', effects: { politicalCapital: 8, narrativeDebt: 9 }, consequence: 'hidden_backlog' },
+        ],
+      },
+      {
+        id: 'boss_headcount_pitch',
+        title: 'COO Wants Headcount Discipline',
+        summary: 'You have one open req and a boss who thinks pain builds character.',
+        mandatory: true,
+        choices: [
+          { id: 'freeze', label: 'Freeze hiring', summary: 'Look disciplined now, absorb pain later.', effects: { budgetHealth: 8, morale: -5, narrativeDebt: 5 }, consequence: 'frozen_hiring' },
+          { id: 'justify', label: 'Defend the req', summary: 'Ask for the seat and explain the queue honestly.', effects: { politicalCapital: -3, compliance: 2, narrativeDebt: -2, promotionPressure: 4 } },
+          { id: 'hide_need', label: 'Pretend you can absorb it', summary: 'Protect optics by underplaying staffing risk.', effects: { politicalCapital: 5, narrativeDebt: 7, morale: -2 }, consequence: 'hidden_backlog' },
+        ],
+      },
+      {
+        id: 'boss_staffing_signal',
+        title: 'Boss Wants Visible Leadership Signal',
+        summary: 'Leadership wants a symbolic act of control.',
+        mandatory: true,
+        choices: [
+          { id: 'coach', label: 'Coach the team', summary: 'Do the slow thing that helps.', effects: { morale: 5, politicalCapital: -2, narrativeDebt: -3, promotionPressure: 4 } },
+          { id: 'fire_someone', label: 'Signal decisiveness', summary: 'Hint that underperformance will be handled.', effects: { politicalCapital: 6, morale: -8, narrativeDebt: 6 } },
+          { id: 'midnight', label: 'Push midnight oil', summary: 'Buy near-term output with sleep.', effects: { backlog: -8, politicalCapital: 5, morale: -6, narrativeDebt: 5 }, consequence: 'burnout_wave' },
+        ],
+      },
+    ],
+    finance: [
+      {
+        id: 'finance_cloud_bill',
+        title: 'FinOps Escalates Cloud Repatriation Deck',
+        summary: 'Apparently elasticity was only acceptable when it fit the board slide.',
+        mandatory: true,
+        choices: [
+          { id: 'own', label: 'Own the spend', summary: 'Explain what actually happened.', effects: { budgetHealth: -4, politicalCapital: -2, narrativeDebt: -3, promotionPressure: 3 } },
+          { id: 'blame', label: 'Blame vendor', summary: 'Claim the MSP burned budget on bad architecture.', effects: { budgetHealth: 4, politicalCapital: 3, narrativeDebt: 6 }, consequence: 'vendor_receipts' },
+          { id: 'freeze', label: 'Freeze hiring', summary: 'Protect the budget headline with fewer people.', effects: { budgetHealth: 8, morale: -4, narrativeDebt: 4 }, consequence: 'frozen_hiring' },
+        ],
+      },
+      {
+        id: 'finance_raise_pushback',
+        title: 'Finance Pushes Back on Raises',
+        summary: 'They ask whether retention is measurable or just emotional.',
+        mandatory: true,
+        choices: [
+          { id: 'fight', label: 'Fight for raises', summary: 'Protect morale and accept budget heat.', effects: { morale: 6, budgetHealth: -7, politicalCapital: -1, promotionPressure: 4 } },
+          { id: 'delay', label: 'Delay raises', summary: 'Buy time by promising next cycle.', effects: { budgetHealth: 5, morale: -5, narrativeDebt: 3 } },
+          { id: 'spin', label: 'Sell growth opportunities', summary: 'Replace money with a larger PDF.', effects: { politicalCapital: 4, narrativeDebt: 5, morale: -3 } },
+        ],
+      },
+      {
+        id: 'finance_zero_based',
+        title: 'Zero-Based Budgeting Week',
+        summary: 'The spreadsheet believes entropy is optional.',
+        mandatory: true,
+        choices: [
+          { id: 'document', label: 'Document reality', summary: 'Show what each role is covering.', effects: { compliance: 4, budgetHealth: 2, politicalCapital: -2, promotionPressure: 3 } },
+          { id: 'trim_story', label: 'Trim the story', summary: 'Inflate efficiency and hope nobody measures it.', effects: { politicalCapital: 5, narrativeDebt: 6 } },
+          { id: 'freeze', label: 'Offer a hiring freeze', summary: 'Calm Finance by pre-sacrificing throughput.', effects: { budgetHealth: 8, morale: -5, narrativeDebt: 4 }, consequence: 'frozen_hiring' },
+        ],
+      },
+    ],
+    audit: [
+      {
+        id: 'audit_timesheets',
+        title: 'Audit Wants Timesheet Evidence',
+        summary: 'The auditor keeps using the phrase traceability with visible joy.',
+        mandatory: true,
+        choices: [
+          { id: 'fix', label: 'Fix the tracking', summary: 'Eat the compliance work now.', effects: { compliance: 8, backlog: 4, politicalCapital: -1, narrativeDebt: -4 } },
+          { id: 'skip', label: 'Skip time tracking', summary: 'Steal time from controls and call it delivery.', effects: { actionPoints: 1, compliance: -8, narrativeDebt: 7 }, consequence: 'skipped_tracking' },
+          { id: 'soften', label: 'Offer a remediation plan', summary: 'Promise structure later.', effects: { politicalCapital: 4, compliance: -2, narrativeDebt: 4 } },
+        ],
+      },
+      {
+        id: 'audit_control_gap',
+        title: 'Control Gap Found in Production Workflow',
+        summary: 'Audit is fascinated by the difference between policy and survival.',
+        mandatory: true,
+        choices: [
+          { id: 'admit', label: 'Admit the gap', summary: 'Fix it properly.', effects: { compliance: 7, politicalCapital: -3, narrativeDebt: -5, promotionPressure: 4 }, consequence: 'truth_respect' },
+          { id: 'paper', label: 'Paper over it', summary: 'Write a policy fast and hope the system catches up.', effects: { politicalCapital: 4, narrativeDebt: 5, compliance: -2 } },
+          { id: 'delay', label: 'Delay remediation', summary: 'Kick the can behind a committee.', effects: { politicalCapital: 2, narrativeDebt: 7 }, consequence: 'skipped_tracking' },
+        ],
+      },
+      {
+        id: 'audit_vendor_access',
+        title: 'Audit Questions Vendor Access',
+        summary: 'Shared credentials have become a governance topic.',
+        mandatory: true,
+        choices: [
+          { id: 'lock', label: 'Tighten access', summary: 'Make the vendor mad and Audit briefly happy.', effects: { compliance: 8, backlog: 2, politicalCapital: -1 } },
+          { id: 'blame', label: 'Blame vendor', summary: 'Pretend the partner ignored process.', effects: { politicalCapital: 4, narrativeDebt: 7 }, consequence: 'vendor_receipts' },
+          { id: 'waiver', label: 'Ask for a waiver', summary: 'Trade control debt for time.', effects: { politicalCapital: 2, compliance: -4, narrativeDebt: 5 } },
+        ],
+      },
+    ],
+    vendor: [
+      {
+        id: 'vendor_missed_sla',
+        title: 'Vendor Misses SLA and Sends a Glossy PDF',
+        summary: 'The partner has replaced delivery with formatting.',
+        mandatory: true,
+        choices: [
+          { id: 'escalate', label: 'Escalate for real', summary: 'Call the miss and document the impact.', effects: { backlog: 4, compliance: 3, politicalCapital: -1, narrativeDebt: -2 } },
+          { id: 'blame', label: 'Blame vendor upward', summary: 'Tell leadership the partner is the blocker.', effects: { politicalCapital: 6, narrativeDebt: 7 }, consequence: 'vendor_receipts' },
+          { id: 'absorb', label: 'Absorb the damage', summary: 'Protect the relationship, punish the team.', effects: { backlog: 6, morale: -5, narrativeDebt: 4 } },
+        ],
+      },
+      {
+        id: 'vendor_ai_pitch',
+        title: 'Vendor Pitches an Agentic AI Desk',
+        summary: 'They say it will eliminate toil, tickets, and maybe accountability.',
+        mandatory: true,
+        choices: [
+          { id: 'pilot', label: 'Run a shadow pilot', summary: 'Fast optics, shaky controls.', effects: { politicalCapital: 6, narrativeDebt: 6, compliance: -3 }, consequence: 'shadow_ai_blowback' },
+          { id: 'ask_questions', label: 'Ask actual questions', summary: 'Slow the hype train with due diligence.', effects: { compliance: 4, politicalCapital: -2, promotionPressure: 3 } },
+          { id: 'defer', label: 'Defer politely', summary: 'Smile, thank them, bury the note.', effects: { politicalCapital: 1, narrativeDebt: -1 } },
+        ],
+      },
+    ],
+    hr: [
+      {
+        id: 'hr_flight_risk',
+        title: 'HR Flags a Flight Risk',
+        summary: 'One of your better people has discovered recruiters.',
+        mandatory: true,
+        choices: [
+          { id: 'raise', label: 'Approve raise', summary: 'Keep them. Hurt budget.', effects: { morale: 6, budgetHealth: -6, politicalCapital: 1 } },
+          { id: 'promise', label: 'Promise growth later', summary: 'Hope the future can outbid the present.', effects: { politicalCapital: 2, narrativeDebt: 4, morale: -4 } },
+          { id: 'shrug', label: 'Let it ride', summary: 'Bet that the market is fake.', effects: { morale: -6, politicalCapital: -2, narrativeDebt: 2 } },
+        ],
+      },
+      {
+        id: 'hr_engagement',
+        title: 'Employee Experience Survey Drops',
+        summary: 'The organization has once again measured sadness instead of fixing it.',
+        mandatory: true,
+        choices: [
+          { id: 'listen', label: 'Hold 1:1s', summary: 'Use time to repair trust.', effects: { morale: 7, politicalCapital: -1, narrativeDebt: -2 } },
+          { id: 'cancel', label: 'Cancel 1:1s', summary: 'Focus on delivery and let culture self-heal.', effects: { actionPoints: 1, morale: -7, narrativeDebt: 6 }, consequence: 'canceled_one_on_ones' },
+          { id: 'spin', label: 'Narrate resilience', summary: 'Turn complaints into a change journey.', effects: { politicalCapital: 5, narrativeDebt: 6, morale: -3 } },
+        ],
+      },
+      {
+        id: 'hr_return_to_office',
+        title: 'Return-to-Office Talking Points Arrive',
+        summary: 'No one has defined culture beyond badge scans.',
+        mandatory: true,
+        choices: [
+          { id: 'push', label: 'Push the message', summary: 'Be the face of policy.', effects: { politicalCapital: 5, morale: -7, narrativeDebt: 4 } },
+          { id: 'soften', label: 'Soften locally', summary: 'Quietly keep the team functional.', effects: { morale: 4, politicalCapital: -2, narrativeDebt: 2 } },
+          { id: 'resist', label: 'Resist upward', summary: 'Protect the team publicly.', effects: { morale: 6, politicalCapital: -5, promotionPressure: 4 } },
+        ],
+      },
+    ],
+    incident: [
+      {
+        id: 'incident_mfa_loop',
+        title: 'MFA Outage Turns Identity Into Performance Art',
+        summary: 'Identity says it is not their fault. Nobody believes them.',
+        mandatory: true,
+        choices: [
+          { id: 'work', label: 'Work tickets', summary: 'Throw labor at the problem.', effects: { backlog: -6, morale: -2, politicalCapital: 1 } },
+          { id: 'vendor', label: 'Blame vendor', summary: 'Tell leadership the IAM provider is the blocker.', effects: { politicalCapital: 5, narrativeDebt: 6 }, consequence: 'vendor_receipts' },
+          { id: 'spin', label: 'Narrate stabilization', summary: 'Talk before fixing.', effects: { politicalCapital: 4, backlog: 4, narrativeDebt: 5 } },
+        ],
+      },
+      {
+        id: 'incident_patch_regret',
+        title: 'Weekend Patch Breaks Monday Login',
+        summary: 'A change intended to reduce risk has improved chaos.',
+        mandatory: true,
+        choices: [
+          { id: 'own', label: 'Own the rollback', summary: 'Fix it, document it, take the heat.', effects: { backlog: -4, compliance: 4, politicalCapital: -1, narrativeDebt: -2 } },
+          { id: 'hide', label: 'Hide backlog', summary: 'Reclassify break-fix as modernization lag.', effects: { politicalCapital: 6, narrativeDebt: 8 }, consequence: 'hidden_backlog' },
+          { id: 'midnight', label: 'Push midnight oil', summary: 'Clear it by force.', effects: { backlog: -8, morale: -6, narrativeDebt: 5 }, consequence: 'burnout_wave' },
+        ],
+      },
+      {
+        id: 'incident_shadow_it',
+        title: 'Shadow IT Ships a Workflow to Production',
+        summary: 'Marketing discovered low-code and now identity is sad.',
+        mandatory: true,
+        choices: [
+          { id: 'contain', label: 'Contain it', summary: 'Do the unglamorous work.', effects: { compliance: 6, backlog: 3, politicalCapital: -1 } },
+          { id: 'spin', label: 'Call it innovation', summary: 'Use the phrase citizen development.', effects: { politicalCapital: 5, narrativeDebt: 6, compliance: -4 } },
+          { id: 'blame', label: 'Blame vendor tooling', summary: 'Point at the platform partner.', effects: { politicalCapital: 3, narrativeDebt: 5 }, consequence: 'vendor_receipts' },
+        ],
+      },
+    ],
+    ai: [
+      {
+        id: 'ai_governance_panic',
+        title: 'AI Governance Memo Lands',
+        summary: 'Leadership wants innovation and control simultaneously and by Friday.',
+        mandatory: true,
+        choices: [
+          { id: 'govern', label: 'Insist on governance', summary: 'Slow, boring, correct.', effects: { compliance: 6, politicalCapital: -2, promotionPressure: 3 } },
+          { id: 'pilot', label: 'Pilot fast', summary: 'Optics first, controls later.', effects: { politicalCapital: 6, narrativeDebt: 7, compliance: -4 }, consequence: 'shadow_ai_blowback' },
+          { id: 'soften', label: 'Write a framework', summary: 'Produce language instead of answers.', effects: { politicalCapital: 4, narrativeDebt: 3 } },
+        ],
+      },
+      {
+        id: 'ai_vibe_code',
+        title: 'Vibe Coding Reaches Production',
+        summary: 'A workflow built entirely on confidence is now paging Ops.',
+        mandatory: true,
+        choices: [
+          { id: 'rollback', label: 'Rollback hard', summary: 'Stability before vibes.', effects: { backlog: -4, compliance: 4, politicalCapital: -1 } },
+          { id: 'frame', label: 'Frame it as innovation', summary: 'Keep the narrative warm.', effects: { politicalCapital: 6, narrativeDebt: 6, compliance: -3 } },
+          { id: 'midnight', label: 'Quietly patch it overnight', summary: 'Fix first, document never.', effects: { backlog: -6, morale: -4, narrativeDebt: 4 }, consequence: 'burnout_wave' },
+        ],
+      },
+    ],
+    news: [
+      { id: 'news_boss_wrong', title: "NEWS: Boss says 'Don't worry about it'", summary: 'Boss is wrong again. Nothing to click, nowhere to hide.', autoEffects: { morale: -2 } },
+      { id: 'news_overtime', title: 'NEWS: Manager declares voluntary mandatory overtime', summary: 'HR would like you to know those words should not fit together.', autoEffects: { morale: -4, narrativeDebt: 1 } },
+      { id: 'news_printer', title: 'NEWS: Printer outage escalated as strategic blocker', summary: 'The printer has more visibility than your backlog.', autoEffects: { politicalCapital: -1, morale: -2 } },
+      { id: 'news_shadow_ai', title: 'NEWS: Shadow AI pilot gains executive sponsor', summary: 'Nobody knows what it does, which is why leadership loves it.', autoEffects: { narrativeDebt: 2, politicalCapital: 1 } },
+      { id: 'news_reorg', title: 'NEWS: Reorg rumor now has its own rumor', summary: 'The organization is iterating on uncertainty.', autoEffects: { morale: -3 } },
+      { id: 'news_finops', title: 'NEWS: FinOps says optimize nine times in one call', summary: 'Budget health suffers emotional damage.', autoEffects: { budgetHealth: -2 } },
+      { id: 'news_vibe', title: 'NEWS: Vibe-coded bot posts to production channel', summary: 'It congratulates the outage for achieving scale.', autoEffects: { compliance: -2, narrativeDebt: 1 } },
+      { id: 'news_steering', title: 'NEWS: Steering committee creates another steering committee', summary: 'Governance continues to scale independently of results.', autoEffects: { backlog: 2, politicalCapital: -1 } },
+      { id: 'news_cloud', title: 'NEWS: Cloud repatriation thread lasts four hours, changes nothing', summary: 'The only thing moving was the meeting invite.', autoEffects: { morale: -2, budgetHealth: -1 } },
+      { id: 'news_badge', title: 'NEWS: Badge scan data cited as culture metric', summary: 'Someone in leadership really committed to the bit.', autoEffects: { morale: -3 } },
+    ],
+  };
+
+  return {
+    CAREER,
+    BOSS_ARCHETYPES,
+    WEEKLY_ACTIONS,
+    POLITICAL_MOVES,
+    CONSEQUENCES,
+    EVENT_TEMPLATES,
+    STAFF_POOL,
+  };
 })();

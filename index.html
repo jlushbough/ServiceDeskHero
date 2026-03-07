@@ -3,658 +3,209 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Service Desk Hero — Chuck Sterling's Rise to CIO</title>
+    <title>Service Desk Hero - Worst-Case IT Dept Sim</title>
     <meta
       name="description"
-      content="Click, automate, and climb the IT ladder from Help Desk Analyst to CIO in this addicting idle clicker game. Build your squad, resolve incidents, and prove you have what it takes."
+      content="Survive and climb through a dysfunctional IT org in a weekly strategy sim about backlog, politics, narrative debt, and getting fired before you make CIO."
     />
-    <link rel="canonical" href="https://www.servicedeskhero.com/" />
-
-    <!-- Favicon -->
     <link rel="icon" type="image/png" href="assets/favicon.png" />
     <link rel="apple-touch-icon" href="assets/favicon.png" />
-
-    <!-- PWA -->
     <link rel="manifest" href="manifest.json" />
     <meta name="theme-color" content="#7c5cfc" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-
-    <!-- Open Graph -->
-    <meta property="og:title" content="Service Desk Hero — Rise to CIO" />
-    <meta property="og:description" content="Click, automate, and climb the IT ladder from Help Desk Analyst to CIO. Build your squad, resolve incidents, master the skill tree." />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://www.servicedeskhero.com/" />
-    <meta property="og:image" content="https://www.servicedeskhero.com/assets/og-image.png" />
-
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Service Desk Hero — Rise to CIO" />
-    <meta name="twitter:description" content="The idle clicker game for IT pros. Resolve tickets, build your squad, climb to CIO." />
-
-    <!-- Fonts & Styles -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/base.css" />
-    <link rel="stylesheet" href="css/layout.css" />
-    <link rel="stylesheet" href="css/components.css" />
-    <link rel="stylesheet" href="css/animations.css" />
-
-    <style>
-      .difficulty-modal-panel {
-        max-width: 720px;
-        width: min(720px, calc(100% - 2rem));
-        border-color: rgba(168, 85, 247, 0.5);
-        background: linear-gradient(155deg, rgba(37, 18, 80, 0.96), rgba(76, 29, 149, 0.95));
-        box-shadow: 0 26px 72px rgba(0, 0, 0, 0.7), 0 0 45px rgba(167, 139, 250, 0.3);
-      }
-      .difficulty-modal-panel p {
-        color: var(--text-dim);
-        margin-top: 0.5rem;
-      }
-      .difficulty-options {
-        margin-top: 1rem;
-        display: grid;
-        gap: 0.75rem;
-      }
-      .difficulty-option-btn {
-        border: 1px solid rgba(168, 85, 247, 0.35);
-        background: rgba(124, 92, 252, 0.16);
-        color: var(--text);
-        border-radius: 12px;
-        padding: 0.9rem 1rem;
-        text-align: left;
-        cursor: pointer;
-        transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
-      }
-      .difficulty-option-btn:hover,
-      .difficulty-option-btn:focus-visible {
-        border-color: rgba(196, 181, 253, 0.8);
-        background: rgba(196, 181, 253, 0.2);
-        transform: translateY(-1px);
-      }
-      .difficulty-option-btn .difficulty-name {
-        font-size: 1.05rem;
-        font-weight: 700;
-      }
-      .difficulty-option-btn .difficulty-meta {
-        color: var(--text-muted);
-        font-size: 0.85rem;
-      }
-    </style>
+    <link rel="stylesheet" href="css/base.css?v=20260307c" />
+    <link rel="stylesheet" href="css/layout.css?v=20260307c" />
+    <link rel="stylesheet" href="css/components.css?v=20260307c" />
+    <link rel="stylesheet" href="css/animations.css?v=20260307c" />
   </head>
   <body>
-    <!-- ========== HEADER ========== -->
     <header id="game-header" role="banner">
-      <div class="header-left">
-        <span class="game-logo" aria-label="Service Desk Hero">🖥️ Service Desk Hero</span>
+      <div class="header-brand">
+        <div class="game-logo">🖥️ Service Desk Hero</div>
+        <div class="game-tag">Worst-Case IT Department Strategy Sim</div>
       </div>
-      <div class="header-center">
-        <span class="career-title-label">Current Title:</span>
-        <span id="career-title" class="career-title-value"
-          >Help Desk Analyst</span
-        >
-        <div class="career-progress-wrap" role="progressbar" aria-label="Career progress">
-          <div id="career-progress-bar" class="career-progress-bar"></div>
+      <div class="header-status">
+        <div>
+          <div class="hdr-label">Week</div>
+          <div id="week-display" class="hdr-value">Week 1</div>
+        </div>
+        <div>
+          <div class="hdr-label">Role</div>
+          <div id="role-title" class="hdr-value">Service Desk Supervisor</div>
+        </div>
+        <div>
+          <div class="hdr-label">Org Scale</div>
+          <div id="org-scale" class="hdr-value">Support Pod</div>
         </div>
       </div>
-      <div class="header-right">
-        <button id="btn-feedback" class="btn-hdr" aria-label="Send feedback" title="Send Feedback">💬</button>
-        <button id="btn-sound" class="btn-hdr" aria-label="Toggle sound effects" title="Toggle Sound">🔊</button>
-        <button id="btn-help" class="btn-hdr" aria-label="How to play" title="How to Play">❓</button>
-        <span id="save-indicator" class="save-indicator">💾 Saved</span>
-        <button id="btn-save" class="btn-hdr" aria-label="Save game">Save</button>
-        <button id="btn-reset" class="btn-hdr btn-danger" aria-label="Reset game">Reset</button>
+      <div class="header-comp">
+        <div>
+          <div class="hdr-label">Hourly</div>
+          <div id="salary-hourly" class="hdr-value">$38/hr</div>
+        </div>
+        <div>
+          <div class="hdr-label">Annual</div>
+          <div id="salary-annual" class="hdr-value">$79.0K</div>
+        </div>
+        <div>
+          <div class="hdr-label">Lifetime</div>
+          <div id="salary-lifetime" class="hdr-value">$0</div>
+        </div>
+      </div>
+      <div class="header-pressure">
+        <div>
+          <div class="hdr-label">Promotion Pressure</div>
+          <div id="promotion-pressure" class="hdr-value">0%</div>
+        </div>
+        <div>
+          <div class="hdr-label">Promotion Score</div>
+          <div id="promotion-score" class="hdr-value">0</div>
+        </div>
+        <div>
+          <div class="hdr-label">Status</div>
+          <div id="status-pill" class="status-pill good">Active</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btn-sound" class="btn-hdr" aria-label="Toggle sound">🔊</button>
+        <button id="btn-help" class="btn-hdr" aria-label="Help">Help</button>
+        <span id="save-indicator" class="save-indicator">Saved</span>
+        <button id="btn-save" class="btn-hdr">Save</button>
+        <button id="btn-reset" class="btn-hdr btn-danger">Reset</button>
       </div>
     </header>
 
-    <!-- ========== INCIDENT BANNER ========== -->
-    <div id="incident-banner" class="incident-banner hidden" role="alert">
-      <div class="incident-inner">
-        <span id="incident-icon" class="incident-icon">🚨</span>
-        <div class="incident-copy">
-          <div class="incident-topline">
-            <span id="incident-severity" class="incident-severity">SEV-2</span>
-            <span id="incident-title" class="incident-title">Critical Incident</span>
-          </div>
-          <div id="incident-text" class="incident-text"></div>
-          <div id="incident-meta" class="incident-meta"></div>
-        </div>
-        <button id="incident-resolve" class="btn-incident" aria-label="Respond to incident">RESPOND NOW</button>
-        <span id="incident-timer" class="incident-timer"></span>
-      </div>
-    </div>
-
-    <!-- ========== MAIN LAYOUT ========== -->
     <main id="game-main" role="main">
-      <!-- ===== LEFT PANEL: Avatar + Clicker + Stats ===== -->
-      <aside id="left-panel" aria-label="Player stats and clicker">
-        <div class="panel avatar-panel">
-          <div id="avatar" class="avatar">
-            <span class="avatar-initials">CS</span>
-            <div class="avatar-ring"></div>
-            <div id="click-burst" class="click-burst"></div>
+      <section class="panel summary-panel" aria-labelledby="summary-title">
+        <div class="panel-head">
+          <div>
+            <div class="eyebrow">Department Summary</div>
+            <h2 id="summary-title">Six ways to fail upward or get fired</h2>
           </div>
-          <div class="hero-info">
-            <h1 id="hero-name">Chuck Sterling</h1>
-            <div class="xp-bar-wrap" role="progressbar" aria-label="Experience points">
-              <div id="xp-bar" class="xp-bar"></div>
-              <span id="xp-label" class="xp-label">0 / 100 XP</span>
-            </div>
-            <div class="level-badge">Lvl <span id="hero-level">1</span></div>
-            <div id="game-day-label" class="game-day-badge">Day 1</div>
+          <div class="panel-note">Current week modifiers update as events and actions land.</div>
+        </div>
+        <div id="summary-metrics" class="metrics-grid"></div>
+        <div class="modifier-box">
+          <div class="modifier-title">This Week</div>
+          <ul id="week-modifiers" class="modifier-list"></ul>
+        </div>
+      </section>
+
+      <section class="panel inbox-panel" aria-labelledby="inbox-title">
+        <div class="panel-head">
+          <div>
+            <div class="eyebrow">Inbox Phase</div>
+            <h2 id="inbox-title">Incidents, memos, and executive nonsense</h2>
+          </div>
+          <div id="mandatory-count" class="panel-note">0 unresolved</div>
+        </div>
+        <div id="inbox-list" class="inbox-list"></div>
+      </section>
+
+      <section class="panel actions-panel" aria-labelledby="actions-title">
+        <div class="panel-head">
+          <div>
+            <div class="eyebrow">Planning Phase</div>
+            <h2 id="actions-title">Spend weekly action points</h2>
+          </div>
+          <div id="ap-display" class="panel-note">5 AP</div>
+        </div>
+        <div id="action-target" class="target-hint">Select an employee or candidate for targeted actions.</div>
+        <div id="action-grid" class="action-grid"></div>
+        <div class="subpanel">
+          <div class="subpanel-title">This Week's Calls</div>
+          <ul id="action-log" class="history-log"></ul>
+        </div>
+      </section>
+
+      <section class="panel org-panel" aria-labelledby="org-title">
+        <div class="panel-head">
+          <div>
+            <div class="eyebrow">Org Chart</div>
+            <h2 id="org-title">Named employees, open reqs, supervisor layers</h2>
+          </div>
+          <div id="org-summary" class="panel-note">0 filled</div>
+        </div>
+        <div id="org-chart" class="org-chart"></div>
+        <div class="subpanel">
+          <div class="subpanel-title">HR Candidate Slate</div>
+          <div id="candidate-slate" class="candidate-slate"></div>
+        </div>
+        <div class="subpanel">
+          <div class="subpanel-title">Selected Employee</div>
+          <div id="staff-detail" class="staff-detail"></div>
+        </div>
+      </section>
+
+      <section class="panel boss-panel" aria-labelledby="boss-title-heading">
+        <div class="panel-head">
+          <div>
+            <div class="eyebrow">Politics Phase</div>
+            <h2 id="boss-title-heading">Boss panel</h2>
           </div>
         </div>
+        <div class="boss-card">
+          <div class="boss-name-row">
+            <div>
+              <div id="boss-name" class="boss-name">Pat Caldwell</div>
+              <div id="boss-title" class="boss-title">VP, Strategic Alignment</div>
+            </div>
+            <span id="boss-mood" class="badge purple">performatively calm</span>
+          </div>
+          <p id="boss-ask" class="boss-ask">Make the queue look intentional before the steering committee sees it.</p>
+          <div id="boss-explain" class="boss-explain">Leadership is distracted by someone else for the moment.</div>
+        </div>
+        <div id="political-moves" class="move-grid"></div>
+        <div class="subpanel history-wrap">
+          <div class="subpanel-title">Recent History</div>
+          <ul id="history-log" class="history-log"></ul>
+        </div>
+      </section>
 
-        <div class="panel clicker-panel">
-          <div class="combo-area">
-            <div id="combo-meter" class="combo-meter hidden" aria-live="polite">
-              <span class="combo-label">COMBO</span>
-              <span id="combo-count">x1</span>
-            </div>
-          </div>
-          <button id="main-clicker" class="main-clicker-btn" aria-label="Resolve a ticket">
-            <span class="btn-icon">🎫</span>
-            <span class="btn-text">Resolve Ticket</span>
-            <span id="click-power-label" class="click-power">+1 ticket</span>
-          </button>
-          <div class="shift-controls">
-            <button id="btn-clock-toggle" class="btn-clock-toggle">🕒 Clock Out</button>
-            <div id="shift-status" class="shift-status">On Shift</div>
-          </div>
-          <div class="clicker-stats">
-            <div class="stat-row">
-              <span>Tickets Resolved</span
-              ><strong id="tickets-display">0</strong>
-            </div>
-            <div class="stat-row">
-              <span>Lifetime Tickets</span
-              ><strong id="lifetime-display">0</strong>
-            </div>
-            <div class="stat-row">
-              <span>Per Click</span><strong id="per-click-display">1</strong>
-            </div>
-            <div class="stat-row">
-              <span>Per Second</span><strong id="per-sec-display">0</strong>
-            </div>
-            <div class="stat-row">
-              <span>Per Minute</span><strong id="per-min-display">0</strong>
-            </div>
-            <div class="stat-row">
-              <span>Difficulty</span><strong id="difficulty-display">Medium</strong>
-            </div>
-            <div class="stat-row prestige-row">
-              <span>🏆 Promotions</span><strong id="prestige-display">0</strong>
-            </div>
-            <div class="stat-row prestige-row">
-              <span>⚡ Prestige Bonus</span
-              ><strong id="prestige-bonus-display">×1.0</strong>
-            </div>
-            <div class="stat-row prestige-row" id="office-upgrades-row" style="display:none;">
-              <span>🪑 Office Upgrades</span><strong id="office-upgrades-display">0</strong>
-            </div>
-            <div class="stat-row strikes-row" id="strikes-row" style="color:var(--red); display:none; border-top:1px solid rgba(248,113,113,0.3); padding-top:8px; margin-top:8px;">
-              <span>❌ Strikes</span><strong id="strikes-display">0 / 3</strong>
-            </div>
+      <section class="panel resolve-panel" aria-labelledby="resolve-title">
+        <div class="panel-head">
+          <div>
+            <div class="eyebrow">Resolution Phase</div>
+            <h2 id="resolve-title">Advance the week</h2>
           </div>
         </div>
-
-        <div class="panel onboarding-panel" id="onboarding-panel">
-          <div class="onboarding-head">
-            <h2 class="onboarding-title">⚡ Quick Start</h2>
-            <button id="btn-dismiss-onboarding" class="onboarding-dismiss" aria-label="Dismiss quick start">×</button>
-          </div>
-          <p id="onboarding-tip" class="onboarding-tip">Clear a few tickets to get the queue moving.</p>
-          <div id="onboarding-checklist" class="onboarding-checklist"></div>
-          <button id="btn-onboarding-action" class="btn-onboarding-action">Get Started</button>
-        </div>
-
-        <div class="panel promotion-panel hidden" id="promotion-panel">
-          <h2 class="promo-title" id="promo-title">🚀 Promotion Ready!</h2>
-          <p id="promo-description" class="promo-desc"></p>
-          <button id="btn-promote" class="btn-promote" aria-label="Accept promotion">Accept Promotion</button>
-        </div>
-      </aside>
-
-      <!-- ===== CENTER PANEL: Tabbed Content ===== -->
-      <section id="center-panel" aria-label="Game tabs">
-        <!-- Tab Nav -->
-        <div class="tab-nav" role="tablist" aria-label="Game sections">
-          <button class="tab-btn active" data-tab="squad" role="tab" aria-selected="true" aria-controls="tab-squad">👥 Squad</button>
-          <button class="tab-btn" data-tab="upgrades" role="tab" aria-selected="false" aria-controls="tab-upgrades">🛒 Upgrades</button>
-          <button class="tab-btn" data-tab="skills" role="tab" aria-selected="false" aria-controls="tab-skills">🧠 Skills</button>
-          <button class="tab-btn" data-tab="achievements" role="tab" aria-selected="false" aria-controls="tab-achievements">🏅 Achievements</button>
-          <button class="tab-btn" data-tab="stats" role="tab" aria-selected="false" aria-controls="tab-stats">📊 Stats</button>
-        </div>
-
-        <!-- ── SQUAD TAB ── -->
-        <div class="tab-pane active" id="tab-squad" role="tabpanel">
-          <div class="tab-header">
-            <h2>Your Squad</h2>
-            <p class="tab-desc">
-              Dispatch specialized IT heroes to auto-resolve tickets. Each hero
-              levels up and earns bonuses for your whole team.
-            </p>
-          </div>
-          <div id="squad-roster" class="squad-roster"></div>
-
-          <div class="squad-bench-header" style="display:flex; justify-content:space-between; align-items:center; margin-top: 1.5rem;">
-            <div style="display:flex; align-items:center; gap: 12px;">
-              <h3 style="margin:0;">Available Recruits</h3>
-              <button id="btn-refresh-board" style="
-                padding: 4px 10px;
-                font-size: 0.75rem;
-                background: rgba(124,92,252,0.15);
-                border: 1px solid rgba(124,92,252,0.3);
-                color: #c4b5fd;
-                border-radius: 6px;
-                cursor: pointer;
-                transition: all 0.15s ease;
-                white-space: nowrap;
-              " onmouseover="this.style.background='rgba(124,92,252,0.3)'" onmouseout="this.style.background='rgba(124,92,252,0.15)'"
-              >🔄 Refresh (500🎫)</button>
-            </div>
-          </div>
-          <div id="recruit-roster" class="recruit-roster"></div>
-        </div>
-
-        <!-- ── UPGRADES TAB ── -->
-        <div class="tab-pane" id="tab-upgrades" role="tabpanel">
-          <div class="tab-header">
-            <h2>Command Center Upgrades</h2>
-            <p class="tab-desc">
-              Invest in tools, automation, and infrastructure. Costs scale 18%
-              per purchase.
-            </p>
-          </div>
-          <div id="upgrades-list" class="upgrades-list"></div>
-        </div>
-
-        <!-- ── SKILLS TAB ── -->
-        <div class="tab-pane" id="tab-skills" role="tabpanel">
-          <div class="tab-header">
-            <h2>Skill Tree</h2>
-            <p class="tab-desc">
-              Spend Skill Points (earned on level-up) to unlock permanent
-              abilities.
-              <span id="skill-points-label" class="skill-pts"
-                >0 SP available</span
-              >
-            </p>
-          </div>
-          <div id="skill-tree" class="skill-tree"></div>
-        </div>
-
-        <!-- ── ACHIEVEMENTS TAB ── -->
-        <div class="tab-pane" id="tab-achievements" role="tabpanel">
-          <div class="tab-header">
-            <h2>Achievements</h2>
-            <p class="tab-desc">
-              Milestones that permanently boost your stats.
-            </p>
-          </div>
-          <div id="achievements-grid" class="achievements-grid"></div>
-        </div>
-
-        <!-- ── STATS TAB ── -->
-        <div class="tab-pane" id="tab-stats" role="tabpanel">
-          <div class="tab-header">
-            <h2>Career Statistics</h2>
-            <p class="tab-desc">
-              Your complete career history and play stats.
-            </p>
-          </div>
-          <div id="stats-content" class="stats-content"></div>
-          <div class="stats-actions">
-            <button id="btn-share" class="btn-share">📋 Copy Stats to Clipboard</button>
-            <button id="btn-export" class="btn-export">💾 Export Save</button>
-            <button id="btn-import" class="btn-import">📂 Import Save</button>
-          </div>
-          <input type="file" id="import-file-input" accept=".json,.txt" style="display:none" />
-        </div>
+        <p id="resolve-note" class="resolve-note">Resolve mandatory inbox decisions before ending the week.</p>
+        <button id="btn-end-week" class="btn-end-week">Resolve Week 1</button>
+        <div class="resolve-footnote">Promotions are optics-weighted. Narrative debt always collects.</div>
       </section>
     </main>
 
-    <!-- ========== TOAST AREA ========== -->
+    <div id="help-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <div class="modal-overlay" id="close-help"></div>
+      <div class="modal-panel">
+        <h2 id="help-title">How this rewrite works</h2>
+        <div class="help-list">
+          <p>Each turn is one week. Clear mandatory inbox choices, spend AP, choose one political move, then resolve the week.</p>
+          <p>The only top-line metrics are Backlog, Morale, Budget Health, Compliance, Political Capital, and Narrative Debt.</p>
+          <p>Promotion is not about being good. It is about looking good long enough for the org to mistake that for leadership.</p>
+          <p>Short-term tricks help now and usually create delayed fallout. The game is about deciding when to lie, stall, overwork, or tell the truth.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="fired-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="fired-title">
+      <div class="modal-overlay"></div>
+      <div class="modal-panel danger-panel">
+        <h2 id="fired-title">You got fired</h2>
+        <p id="fired-reason">Leadership has decided your story no longer aligns with the org.</p>
+        <button id="btn-restart-fired" class="btn-end-week">Restart at Supervisor</button>
+      </div>
+    </div>
+
     <div id="toast-area" class="toast-area" aria-live="polite"></div>
 
-    <!-- ========== FLOATING CLICK NUMBERS ========== -->
-    <div id="float-layer" class="float-layer"></div>
-
-    <!-- ========== DIFFICULTY MODAL ========== -->
-    <div id="difficulty-modal" class="help-modal hidden">
-      <div class="help-overlay" id="difficulty-overlay"></div>
-      <div class="help-panel difficulty-modal-panel">
-        <h2>ðŸ”´ Choose Your Difficulty</h2>
-        <p>Set the pace of your promotion run before you begin. You can still win, just maybe slower.</p>
-        <div class="difficulty-options">
-          <button type="button" class="difficulty-option-btn" data-difficulty="easy">
-            <span class="difficulty-name">Easy</span>
-            <span class="difficulty-meta">~1 hour to CIO</span>
-          </button>
-          <button type="button" class="difficulty-option-btn" data-difficulty="medium">
-            <span class="difficulty-name">Medium</span>
-            <span class="difficulty-meta">~5 hours to CIO</span>
-          </button>
-          <button type="button" class="difficulty-option-btn" data-difficulty="hard">
-            <span class="difficulty-name">Hard</span>
-            <span class="difficulty-meta">~10 hours to CIO</span>
-          </button>
-          <button type="button" class="difficulty-option-btn" data-difficulty="insane">
-            <span class="difficulty-name">Maybe Try a Real Job?</span>
-            <span class="difficulty-meta">~100 hours to CIO</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ========== HOW TO PLAY MODAL ========== -->
-    <div id="help-modal" class="help-modal hidden">
-      <div class="help-overlay" id="help-overlay"></div>
-      <div class="help-panel">
-        <h2>🖥️ How to Play</h2>
-        <p class="help-lead">Three things matter at the start: click tickets, hire one competent gremlin, and do not ignore incidents.</p>
-        <div class="help-grid compact">
-          <div class="help-card">
-            <span class="help-card-icon">1️⃣</span>
-            <h3>Farm Tickets Fast</h3>
-            <p>Hammer <strong>Resolve Ticket</strong> to build early momentum and combo bonuses.</p>
-          </div>
-          <div class="help-card">
-            <span class="help-card-icon">2️⃣</span>
-            <h3>Recruit Early</h3>
-            <p>Your first hire gives passive throughput and makes the game feel less like unpaid overtime.</p>
-          </div>
-          <div class="help-card">
-            <span class="help-card-icon">3️⃣</span>
-            <h3>Respect Incidents</h3>
-            <p>Incidents are high-reward panic events. Ignore them and you earn strikes. Three strikes and HR wins.</p>
-          </div>
-        </div>
-        <button id="btn-close-help" class="btn-close-help">Got It — Let’s Cause Some Process Improvement 🚀</button>
-      </div>
-    </div>
-
-    <!-- ========== FEEDBACK MODAL ========== -->
-    <div id="feedback-modal" class="help-modal hidden">
-      <div class="help-overlay" id="feedback-overlay"></div>
-      <div class="help-panel feedback-panel">
-        <h2>💬 Send Feedback</h2>
-        <p class="help-lead">Bug, idea, balance gripe, UX complaint — send it. It goes into the real backlog.</p>
-        <form id="feedback-form" class="feedback-form">
-          <label class="feedback-label">
-            Type
-            <select id="feedback-type" class="feedback-input">
-              <option value="bug">Bug</option>
-              <option value="idea">Idea</option>
-              <option value="balance">Balance</option>
-              <option value="ux">UX</option>
-            </select>
-          </label>
-          <label class="feedback-label">
-            Message
-            <textarea id="feedback-message" class="feedback-input feedback-textarea" maxlength="1500" placeholder="Tell us what broke, what felt weird, or what should exist."></textarea>
-          </label>
-          <label class="feedback-label">
-            Optional contact
-            <input id="feedback-email" class="feedback-input" type="email" maxlength="200" placeholder="you@example.com" />
-          </label>
-          <div class="feedback-actions">
-            <button type="button" id="btn-close-feedback" class="btn-hdr">Cancel</button>
-            <button type="submit" id="btn-submit-feedback" class="btn-close-help">Send Feedback</button>
-          </div>
-          <div id="feedback-status" class="feedback-status"></div>
-        </form>
-      </div>
-    </div>
-
-    <!-- ========== OFFICE INTERLUDE MODAL ========== -->
-    <div id="office-interlude-modal" class="help-modal hidden">
-      <div class="help-overlay"></div>
-      <div class="help-panel office-interlude-panel">
-        <h2>🏢 Promotion Interlude</h2>
-        <p class="help-lead">New title. New furniture. Pick one permanent office upgrade before the next round of nonsense begins.</p>
-        <div id="office-choice-list" class="office-choice-list"></div>
-      </div>
-    </div>
-
-    <!-- ========== FIRED MODAL ========== -->
-    <div id="fired-modal" class="help-modal hidden">
-      <div class="help-overlay"></div>
-      <div class="help-panel" style="border-color: var(--red); box-shadow: 0 0 80px rgba(248,113,113,0.3), 0 40px 80px rgba(0,0,0,0.8);">
-        <h2 style="color: var(--red); font-size: 2rem;">💀 YOU'RE FIRED!</h2>
-        <p style="font-size: 1.1rem; color: var(--text-muted); margin-bottom: 24px;">You accrued 3 strikes and failed to handle critical incidents properly. HR has packed your desk.</p>
-        <div style="background: rgba(248,113,113,0.1); padding: 16px; border-radius: var(--radius-md); border: 1px solid rgba(248,113,113,0.3); margin-bottom: 24px;">
-          <h3 style="color: var(--text); margin-bottom: 8px;">Consequences:</h3>
-          <ul style="color: var(--text-dim); text-align: left; padding-left: 20px; font-size: 0.9rem;">
-            <li>All tickets, squad members, and upgrades lost.</li>
-            <li>Current level and prestige multipliers are maintained.</li>
-            <li>Unlocked skills and achievements are kept.</li>
-            <li>You must start climbing the ladder again.</li>
-          </ul>
-        </div>
-        <button id="btn-accept-fired" class="btn-close-help" style="background: linear-gradient(135deg, var(--red), darkred);">Pack My Desk</button>
-      </div>
-    </div>
-
-    <!-- ========== DISPATCH MODAL ========== -->
-  <div id="dispatch-modal" class="dispatch-modal hidden">
-    <div class="dispatch-overlay" id="dispatch-overlay"></div>
-    <div class="dispatch-panel">
-      <div class="dispatch-header">
-        <span id="dispatch-inc-icon" class="dispatch-inc-icon">🚨</span>
-        <div class="dispatch-inc-info">
-          <h2 id="dispatch-inc-title">CRITICAL INCIDENT</h2>
-          <p id="dispatch-inc-text"></p>
-        </div>
-        <div class="dispatch-countdown">
-          <span id="dispatch-countdown-num">30</span>
-          <small>seconds</small>
-        </div>
-      </div>
-      <div class="dispatch-skills-needed">
-        <span class="dispatch-skills-label">🎯 Best Skills:</span>
-        <div id="dispatch-required-skills" class="dispatch-skills-row"></div>
-      </div>
-      <div id="dispatch-briefing" class="dispatch-briefing">
-        <div id="dispatch-briefing-chips" class="dispatch-briefing-chips"></div>
-        <div class="dispatch-recommendation">
-          <div class="dispatch-recommendation-label">Recommended responder</div>
-          <div id="dispatch-recommendation-text" class="dispatch-recommendation-text">Scanning the squad for the least terrible option...</div>
-        </div>
-      </div>
-      <div id="dispatch-hero-list" class="dispatch-hero-list"></div>
-      <div class="dispatch-footer">
-        <span class="dispatch-footer-note">Perfect match = 3× reward &bull; Good match = 2× &bull; Any hero helps</span>
-        <button id="dispatch-self-btn" class="btn-dispatch-self">⚡ Handle Myself</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== HANDLE MYSELF MINIGAME MODAL ========== -->
-  <div id="minigame-modal" class="minigame-modal hidden">
-    <div class="minigame-overlay"></div>
-    <div class="minigame-panel" id="minigame-panel">
-      <!-- Active minigame -->
-      <div id="minigame-active">
-        <span id="minigame-icon" class="minigame-icon">🚨</span>
-        <div id="minigame-title" class="minigame-title">HANDLE IT YOURSELF</div>
-        <div id="minigame-subtitle" class="minigame-subtitle">Mash the button! Fill the bar before time runs out!</div>
-
-        <div class="minigame-timer-row">
-          <span>Response Progress</span>
-          <span id="minigame-timer" class="minigame-timer-val">15s</span>
-        </div>
-
-        <div class="minigame-bar-wrap">
-          <div id="minigame-bar" class="minigame-bar"></div>
-          <div id="minigame-bar-label" class="minigame-bar-label">0%</div>
-        </div>
-
-        <button id="btn-minigame-click" class="btn-minigame-click" aria-label="Click to resolve incident">
-          <span class="minigame-click-label">💻<br>RESOLVE!</span>
-        </button>
-
-        <div id="minigame-click-counter" class="minigame-clicks-counter">Clicks: <strong>0</strong></div>
-        <div id="minigame-reward-preview" class="minigame-reward-preview">Reward: <strong>calculating...</strong></div>
-
-        <button id="btn-minigame-resolve" class="btn-minigame-resolve hidden">✅ RESOLVED! Collect Reward</button>
-      </div>
-      <!-- Result screen -->
-      <div id="minigame-result" class="minigame-result hidden">
-        <span id="minigame-result-emoji" class="minigame-result-emoji">🎉</span>
-        <div id="minigame-result-title" class="minigame-result-title success">INCIDENT RESOLVED!</div>
-        <div id="minigame-result-reward" class="minigame-result-reward">+0 tickets</div>
-        <button id="btn-minigame-close" class="btn-dispatch-self" style="margin-top:16px;width:100%;">Continue</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== JS MODULES ========== -->
-  <script src="js/heroes.js"></script>
-  <script src="js/audio.js"></script>
-  <script type="module" src="js/constants.js"></script>
-  <script>
-    (function () {
-      const DIFFICULTY_LABELS = {
-        easy: { name: "Easy", desc: "~1 hour to CIO" },
-        medium: { name: "Medium", desc: "~5 hours to CIO" },
-        hard: { name: "Hard", desc: "~10 hours to CIO" },
-        insane: { name: "Maybe Try a Real Job?", desc: "~100 hours to CIO" },
-      };
-
-      const SAVE_HINTS = [
-        "serviceDeskHeroSave",
-        "serviceDeskHeroState",
-        "serviceDeskHero",
-        "servicedeskhero",
-        "sdhero",
-        "sdh-save",
-      ];
-      const DIFFICULTY_KEYS = [
-        "serviceDeskHeroDifficulty",
-        "sdhDifficulty",
-        "difficulty",
-        "difficultyMode",
-      ];
-      const MAIN_SCRIPT_ID = "service-desk-main-script";
-
-      function parseSavePayload(raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (!parsed || typeof parsed !== "object") {
-            return null;
-          }
-          return parsed;
-        } catch {
-          return null;
-        }
-      }
-
-      function hasExistingSave() {
-        const keys = Object.keys(localStorage);
-        const knownKey = keys.some((key) =>
-          SAVE_HINTS.some((hint) => key.toLowerCase().includes(hint.toLowerCase()))
-        );
-        if (knownKey) return true;
-
-        return keys.some((key) => {
-          const parsed = parseSavePayload(localStorage.getItem(key));
-          if (!parsed) {
-            return false;
-          }
-          return (
-            parsed.tickets !== undefined ||
-            parsed.lifetime !== undefined ||
-            parsed.lifetimeTickets !== undefined ||
-            parsed.stats !== undefined ||
-            parsed.achievements !== undefined ||
-            parsed.careerIndex !== undefined ||
-            parsed.heroLevel !== undefined ||
-            parsed.upgrades !== undefined ||
-            parsed.squad !== undefined
-          );
-        });
-      }
-
-      function getSavedDifficulty() {
-        const directSave = DIFFICULTY_KEYS.find((key) => DIFFICULTY_LABELS[localStorage.getItem(key)]);
-        if (directSave) return localStorage.getItem(directSave);
-
-        const difficultyKey = Object.keys(localStorage).find(
-          (key) => key.toLowerCase().includes("difficulty") && DIFFICULTY_LABELS[localStorage.getItem(key)]
-        );
-        if (difficultyKey) return localStorage.getItem(difficultyKey);
-
-        return "";
-      }
-
-      function syncDifficulty(id) {
-        const normalized = DIFFICULTY_LABELS[id] ? id : "medium";
-        window.__GAME_DIFFICULTY__ = normalized;
-        window.GAME_SETTINGS = window.GAME_SETTINGS || {};
-        window.GAME_SETTINGS.difficulty = normalized;
-
-        DIFFICULTY_KEYS.forEach((key) => localStorage.setItem(key, normalized));
-        localStorage.setItem("difficultyMode", normalized);
-
-        const difficultyDisplay = document.getElementById("difficulty-display");
-        if (difficultyDisplay) {
-          difficultyDisplay.textContent = DIFFICULTY_LABELS[normalized].name;
-        }
-      }
-
-      function loadMain() {
-        if (document.getElementById(MAIN_SCRIPT_ID)) return;
-        const script = document.createElement("script");
-        script.id = MAIN_SCRIPT_ID;
-        script.src = "js/main.js";
-        document.body.appendChild(script);
-      }
-
-      function startWithDifficulty(mode) {
-        syncDifficulty(mode);
-        const difficultyModal = document.getElementById("difficulty-modal");
-        if (difficultyModal) {
-          difficultyModal.classList.add("hidden");
-        }
-        loadMain();
-      }
-
-      function initDifficultyModal() {
-        const difficultyModal = document.getElementById("difficulty-modal");
-        if (!difficultyModal) {
-          loadMain();
-          return;
-        }
-
-        const selected = getSavedDifficulty() || "medium";
-        syncDifficulty(selected);
-
-        if (hasExistingSave()) {
-          difficultyModal.classList.add("hidden");
-          loadMain();
-          return;
-        }
-
-        difficultyModal.classList.remove("hidden");
-        difficultyModal.querySelectorAll("[data-difficulty]").forEach((button) => {
-          button.addEventListener("click", () => {
-            startWithDifficulty(button.getAttribute("data-difficulty"));
-          });
-        });
-      }
-
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", initDifficultyModal, { once: true });
-      } else {
-        initDifficultyModal();
-      }
-    })();
-  </script>
-  <!--BUILD_VERSION-->
+    <script src="js/heroes.js?v=20260307c"></script>
+    <script src="js/audio.js?v=20260307c"></script>
+    <script src="js/constants.js?v=20260307c"></script>
+    <script src="js/main.js?v=20260307c"></script>
   </body>
 </html>
