@@ -1,0 +1,4 @@
+2026/03/07-14:53:51.377 121c Creating DB c:\EHGIT\ServiceDeskHero\tmp\edge-profile\Default\EdgeCoupons/coupons_data.db since it was missing.
+2026/03/07-14:53:51.392 121c Reusing MANIFEST c:\EHGIT\ServiceDeskHero\tmp\edge-profile\Default\EdgeCoupons/coupons_data.db/MANIFEST-000001
+2026/03/07-14:53:51.398 aeb8 Level-0 table #5: started
+2026/03/07-14:53:51.404 aeb8 Level-0 table #5: 681597 bytes OK

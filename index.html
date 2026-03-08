@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Service Desk Hero - Worst-Case IT Dept Sim</title>
+    <title>Service Desk Hero - Hiring and Timesheet Sim</title>
     <meta
       name="description"
-      content="Survive and climb through a dysfunctional IT org in a weekly strategy sim about backlog, politics, narrative debt, and getting fired before you make CIO."
+      content="Hire, coach, and manage a growing IT team in a fixed-screen strategy sim about staffing, approvals, compliance, and surviving until you make Director."
     />
     <link rel="icon" type="image/png" href="assets/favicon.png" />
     <link rel="apple-touch-icon" href="assets/favicon.png" />
@@ -17,16 +17,16 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/base.css?v=20260307c" />
-    <link rel="stylesheet" href="css/layout.css?v=20260307c" />
-    <link rel="stylesheet" href="css/components.css?v=20260307c" />
-    <link rel="stylesheet" href="css/animations.css?v=20260307c" />
+    <link rel="stylesheet" href="css/base.css?v=20260308a" />
+    <link rel="stylesheet" href="css/layout.css?v=20260308a" />
+    <link rel="stylesheet" href="css/components.css?v=20260308a" />
+    <link rel="stylesheet" href="css/animations.css?v=20260308a" />
   </head>
   <body>
     <header id="game-header" role="banner">
       <div class="header-brand">
         <div class="game-logo">🖥️ Service Desk Hero</div>
-        <div class="game-tag">Worst-Case IT Department Strategy Sim</div>
+        <div class="game-tag">Hire well, approve the stack, survive to Director</div>
       </div>
       <div class="header-status">
         <div>
@@ -44,26 +44,22 @@
       </div>
       <div class="header-comp">
         <div>
-          <div class="hdr-label">Hourly</div>
-          <div id="salary-hourly" class="hdr-value">$38/hr</div>
-        </div>
-        <div>
-          <div class="hdr-label">Annual</div>
+          <div class="hdr-label">Salary</div>
           <div id="salary-annual" class="hdr-value">$79.0K</div>
         </div>
         <div>
-          <div class="hdr-label">Lifetime</div>
+          <div class="hdr-label">Career Cash</div>
           <div id="salary-lifetime" class="hdr-value">$0</div>
         </div>
       </div>
       <div class="header-pressure">
         <div>
-          <div class="hdr-label">Promotion Pressure</div>
-          <div id="promotion-pressure" class="hdr-value">0%</div>
+          <div class="hdr-label">Approvability</div>
+          <div id="approvability-score" class="hdr-value">0</div>
         </div>
         <div>
-          <div class="hdr-label">Promotion Score</div>
-          <div id="promotion-score" class="hdr-value">0</div>
+          <div class="hdr-label">Pressure</div>
+          <div id="promotion-pressure" class="hdr-value">0%</div>
         </div>
         <div>
           <div class="hdr-label">Status</div>
@@ -83,111 +79,105 @@
       <section class="panel summary-panel" aria-labelledby="summary-title">
         <div class="panel-head">
           <div>
-            <div class="eyebrow">Department Summary</div>
-            <h2 id="summary-title">Six ways to fail upward or get fired</h2>
+            <div class="eyebrow">Director Track</div>
+            <h2 id="summary-title">Build the team, keep approvals clean, get promoted</h2>
           </div>
-          <div class="panel-note">Current week modifiers update as events and actions land.</div>
+          <div class="panel-note">Click a person, use the focus card for people moves, use the desk for weekly control, then resolve.</div>
         </div>
         <div id="summary-metrics" class="metrics-grid"></div>
-        <div class="modifier-box">
-          <div class="modifier-title">This Week</div>
-          <ul id="week-modifiers" class="modifier-list"></ul>
+        <div class="summary-band">
+          <div class="subpanel">
+            <div class="subpanel-title">Career Ladder</div>
+            <div id="director-track" class="director-track"></div>
+          </div>
+          <div class="modifier-box">
+            <div class="modifier-title">Weekly Flow</div>
+            <ul id="week-modifiers" class="modifier-list"></ul>
+          </div>
+          <div class="boss-card">
+            <div class="boss-name-row">
+              <div>
+                <div id="boss-name" class="boss-name">Pat Caldwell</div>
+                <div id="boss-title" class="boss-title">VP, Strategic Alignment</div>
+              </div>
+              <span id="boss-mood" class="badge purple">performatively calm</span>
+            </div>
+            <p id="boss-ask" class="boss-ask">Make the queue look intentional before the steering committee sees it.</p>
+            <div id="boss-explain" class="boss-explain">Leadership is distracted by someone else for the moment.</div>
+            <div id="political-moves" class="move-grid compact"></div>
+          </div>
         </div>
       </section>
 
       <section class="panel inbox-panel" aria-labelledby="inbox-title">
         <div class="panel-head">
           <div>
-            <div class="eyebrow">Inbox Phase</div>
-            <h2 id="inbox-title">Incidents, memos, and executive nonsense</h2>
+            <div class="eyebrow">Approval Queue</div>
+            <h2 id="inbox-title">Timesheets, retention fires, and leadership asks</h2>
           </div>
-          <div id="mandatory-count" class="panel-note">0 unresolved</div>
+          <div id="mandatory-count" class="panel-note">0 approvals waiting</div>
         </div>
         <div id="inbox-list" class="inbox-list"></div>
-      </section>
-
-      <section class="panel actions-panel" aria-labelledby="actions-title">
-        <div class="panel-head">
-          <div>
-            <div class="eyebrow">Planning Phase</div>
-            <h2 id="actions-title">Spend weekly action points</h2>
-          </div>
-          <div id="ap-display" class="panel-note">5 AP</div>
-        </div>
-        <div id="action-target" class="target-hint">Select an employee or candidate for targeted actions.</div>
-        <div id="action-grid" class="action-grid"></div>
-        <div class="subpanel">
-          <div class="subpanel-title">This Week's Calls</div>
-          <ul id="action-log" class="history-log"></ul>
-        </div>
       </section>
 
       <section class="panel org-panel" aria-labelledby="org-title">
         <div class="panel-head">
           <div>
-            <div class="eyebrow">Org Chart</div>
-            <h2 id="org-title">Named employees, open reqs, supervisor layers</h2>
+            <div class="eyebrow">Team Board</div>
+            <h2 id="org-title">Roster page, open seats, and candidate slate</h2>
           </div>
           <div id="org-summary" class="panel-note">0 filled</div>
         </div>
+        <div id="org-summary-strip" class="org-summary-strip"></div>
+        <div class="roster-toolbar">
+          <div id="roster-page-label" class="panel-note">Page 1 of 1</div>
+          <div class="pager-actions">
+            <button class="btn-hdr btn-pager" data-roster-page="prev" aria-label="Previous roster page">Prev</button>
+            <button class="btn-hdr btn-pager" data-roster-page="next" aria-label="Next roster page">Next</button>
+          </div>
+        </div>
         <div id="org-chart" class="org-chart"></div>
-        <div class="subpanel">
-          <div class="subpanel-title">HR Candidate Slate</div>
+        <div class="subpanel candidate-wrap">
+          <div class="subpanel-title">Candidate Slate</div>
           <div id="candidate-slate" class="candidate-slate"></div>
         </div>
-        <div class="subpanel">
-          <div class="subpanel-title">Selected Employee</div>
-          <div id="staff-detail" class="staff-detail"></div>
-        </div>
       </section>
 
-      <section class="panel boss-panel" aria-labelledby="boss-title-heading">
+      <section class="panel actions-panel" aria-labelledby="actions-title">
         <div class="panel-head">
           <div>
-            <div class="eyebrow">Politics Phase</div>
-            <h2 id="boss-title-heading">Boss panel</h2>
+            <div class="eyebrow">Management Desk</div>
+            <h2 id="actions-title">Run the week from the focus card and the desk controls</h2>
+          </div>
+          <div id="ap-display" class="panel-note">5 AP</div>
+        </div>
+        <div id="staff-detail" class="staff-detail"></div>
+        <div id="action-target" class="target-hint">Desk actions affect the whole week. Focus card actions affect the person you clicked.</div>
+        <div id="action-grid" class="action-grid"></div>
+        <div class="action-lower">
+          <div class="subpanel">
+            <div class="subpanel-title">This Week's Calls</div>
+            <ul id="action-log" class="history-log"></ul>
+          </div>
+          <div class="subpanel resolve-shell">
+            <div class="subpanel-title">Resolve Week</div>
+            <p id="resolve-note" class="resolve-note">Resolve mandatory approvals before ending the week.</p>
+            <button id="btn-end-week" class="btn-end-week">Resolve Week 1</button>
+            <div class="resolve-footnote">High approvability, a healthy bench, and salary growth are the clearest proof that you are moving up.</div>
           </div>
         </div>
-        <div class="boss-card">
-          <div class="boss-name-row">
-            <div>
-              <div id="boss-name" class="boss-name">Pat Caldwell</div>
-              <div id="boss-title" class="boss-title">VP, Strategic Alignment</div>
-            </div>
-            <span id="boss-mood" class="badge purple">performatively calm</span>
-          </div>
-          <p id="boss-ask" class="boss-ask">Make the queue look intentional before the steering committee sees it.</p>
-          <div id="boss-explain" class="boss-explain">Leadership is distracted by someone else for the moment.</div>
-        </div>
-        <div id="political-moves" class="move-grid"></div>
-        <div class="subpanel history-wrap">
-          <div class="subpanel-title">Recent History</div>
-          <ul id="history-log" class="history-log"></ul>
-        </div>
-      </section>
-
-      <section class="panel resolve-panel" aria-labelledby="resolve-title">
-        <div class="panel-head">
-          <div>
-            <div class="eyebrow">Resolution Phase</div>
-            <h2 id="resolve-title">Advance the week</h2>
-          </div>
-        </div>
-        <p id="resolve-note" class="resolve-note">Resolve mandatory inbox decisions before ending the week.</p>
-        <button id="btn-end-week" class="btn-end-week">Resolve Week 1</button>
-        <div class="resolve-footnote">Promotions are optics-weighted. Narrative debt always collects.</div>
       </section>
     </main>
 
     <div id="help-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="help-title">
       <div class="modal-overlay" id="close-help"></div>
       <div class="modal-panel">
-        <h2 id="help-title">How this rewrite works</h2>
+        <h2 id="help-title">How this version works</h2>
         <div class="help-list">
-          <p>Each turn is one week. Clear mandatory inbox choices, spend AP, choose one political move, then resolve the week.</p>
-          <p>The only top-line metrics are Backlog, Morale, Budget Health, Compliance, Political Capital, and Narrative Debt.</p>
-          <p>Promotion is not about being good. It is about looking good long enough for the org to mistake that for leadership.</p>
-          <p>Short-term tricks help now and usually create delayed fallout. The game is about deciding when to lie, stall, overwork, or tell the truth.</p>
+          <p>Each turn is one week. Clear the mandatory approvals first, then make people moves from the focus card, then spend desk AP, then resolve.</p>
+          <p>Click any employee in the org chart to open their baseball-card view. That is where raise, promote, demote, fire, and coaching decisions live.</p>
+          <p>Approvability measures how promotable and trustworthy you look. Clean paperwork, solid compliance, and low management debt push it up.</p>
+          <p>Your salary is your player KPI on the career ladder. The win condition is still making Director.</p>
         </div>
       </div>
     </div>
@@ -203,9 +193,9 @@
 
     <div id="toast-area" class="toast-area" aria-live="polite"></div>
 
-    <script src="js/heroes.js?v=20260307c"></script>
-    <script src="js/audio.js?v=20260307c"></script>
-    <script src="js/constants.js?v=20260307c"></script>
-    <script src="js/main.js?v=20260307c"></script>
+    <script src="js/staff.js?v=20260308a"></script>
+    <script src="js/audio.js?v=20260308a"></script>
+    <script src="js/constants.js?v=20260308a"></script>
+    <script src="js/main.js?v=20260308a"></script>
   </body>
 </html>

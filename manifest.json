@@ -1,7 +1,7 @@
 {
   "name": "Service Desk Hero",
   "short_name": "SDH",
-  "description": "Click, automate, and climb the IT ladder from Help Desk Analyst to CIO in this addicting idle clicker game.",
+  "description": "Survive and climb through a dysfunctional IT org in a weekly strategy sim about backlog, politics, and narrative debt.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#060414",

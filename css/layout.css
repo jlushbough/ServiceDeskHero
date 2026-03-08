@@ -1,5 +1,5 @@
 /* ============================================================
-   layout.css - Single-screen strategy dashboard
+   layout.css - Fixed 1920x1080 dashboard layout
    ============================================================ */
 
 html,
@@ -17,10 +17,10 @@ body {
 #game-header {
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: 1.2fr 0.95fr 0.85fr 0.9fr auto;
-  gap: 16px;
+  grid-template-columns: minmax(240px, 1.15fr) minmax(280px, 1fr) minmax(180px, 0.65fr) minmax(260px, 0.9fr) auto;
+  gap: 12px;
   align-items: center;
-  padding: 14px 18px;
+  padding: 12px 16px;
   background: rgba(6, 4, 20, 0.96);
   border-bottom: 1px solid var(--panel-border);
   box-shadow: 0 2px 40px rgba(0, 0, 0, 0.45);
@@ -34,8 +34,18 @@ body {
   min-width: 0;
 }
 
-.header-status,
-.header-comp,
+.header-status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.header-comp {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .header-pressure {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -53,23 +63,20 @@ body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(320px, 1.02fr) minmax(340px, 0.98fr) minmax(420px, 1.2fr);
-  grid-template-rows: auto 1fr auto;
+  grid-template-columns: minmax(320px, 0.92fr) minmax(380px, 1.02fr) minmax(420px, 1.06fr);
+  grid-template-rows: minmax(248px, 0.35fr) minmax(0, 1fr);
   grid-template-areas:
     'summary summary summary'
-    'inbox actions org'
-    'boss resolve org';
-  gap: 14px;
-  padding: 14px;
+    'inbox org actions';
+  gap: 12px;
+  padding: 12px;
   overflow: hidden;
 }
 
 .summary-panel { grid-area: summary; }
 .inbox-panel { grid-area: inbox; }
-.actions-panel { grid-area: actions; }
 .org-panel { grid-area: org; }
-.boss-panel { grid-area: boss; }
-.resolve-panel { grid-area: resolve; }
+.actions-panel { grid-area: actions; }
 
 .panel {
   min-height: 0;
@@ -77,17 +84,40 @@ body {
   flex-direction: column;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
-  border-radius: var(--radius-lg);
-  padding: 14px;
+  border-radius: 20px;
+  padding: 12px;
+  overflow: hidden;
   backdrop-filter: blur(14px);
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
+.summary-panel {
+  gap: 10px;
+}
+
+.summary-band {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 1.15fr);
+  gap: 12px;
+}
+
 .inbox-panel,
-.actions-panel,
 .org-panel,
-.boss-panel {
-  overflow: hidden;
+.actions-panel {
+  min-height: 0;
+}
+
+.org-panel {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.actions-panel {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 10px;
 }
 
 .inbox-list,
@@ -95,15 +125,23 @@ body {
 .org-chart,
 .candidate-slate,
 .staff-detail,
-.history-wrap,
-.move-grid {
+.move-grid,
+.director-track,
+.org-summary-strip,
+.action-lower {
   min-height: 0;
+}
+
+.action-lower {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 10px;
 }
 
 .toast-area {
   position: fixed;
-  right: 18px;
-  bottom: 18px;
+  right: 16px;
+  bottom: 16px;
   z-index: 999;
   display: flex;
   flex-direction: column;
@@ -139,10 +177,10 @@ body {
 
 @media (max-width: 1500px) {
   #game-header {
-    grid-template-columns: 1.2fr 1fr 1fr auto;
+    grid-template-columns: 1.1fr 1fr 0.8fr auto;
     grid-template-areas:
-      'brand status comp actions'
-      'brand pressure pressure actions';
+      'brand status pressure actions'
+      'brand comp comp actions';
   }
 
   .header-brand { grid-area: brand; }
@@ -150,6 +188,15 @@ body {
   .header-comp { grid-area: comp; }
   .header-pressure { grid-area: pressure; }
   .header-actions { grid-area: actions; }
+
+  #game-main {
+    grid-template-columns: minmax(280px, 0.95fr) minmax(340px, 1fr) minmax(380px, 1fr);
+    grid-template-rows: minmax(256px, auto) minmax(0, 1fr);
+  }
+
+  .summary-band {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 1240px) {
@@ -159,22 +206,24 @@ body {
   }
 
   #game-main {
-    height: auto;
     grid-template-columns: 1fr;
     grid-template-rows: auto;
     grid-template-areas:
       'summary'
       'inbox'
-      'actions'
       'org'
-      'boss'
-      'resolve';
+      'actions';
+    overflow: visible;
+  }
+
+  .summary-band,
+  .action-lower {
+    grid-template-columns: 1fr;
   }
 
   .org-panel,
   .actions-panel,
-  .inbox-panel,
-  .boss-panel {
-    min-height: 420px;
+  .inbox-panel {
+    display: flex;
   }
 }

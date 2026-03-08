@@ -1,0 +1,10 @@
+2026/03/07-18:42:17.615 1d918 Reusing MANIFEST c:\EHGIT\ServiceDeskHero\tmp\edge-profile\Default\EdgeCoupons/coupons_data.db/MANIFEST-000001
+2026/03/07-18:42:17.616 1d918 Recovering log #3
+2026/03/07-18:42:17.619 1d918 Level-0 table #3: started
+2026/03/07-18:42:17.623 1d918 Level-0 table #3: 681597 bytes OK
+2026/03/07-18:42:17.625 1d918 Recovering log #4
+2026/03/07-18:42:17.625 1d918 Reusing old log c:\EHGIT\ServiceDeskHero\tmp\edge-profile\Default\EdgeCoupons/coupons_data.db/000004.log 
+2026/03/07-18:42:17.628 1d918 Delete type=0 #3
+2026/03/07-18:42:17.628 1d918 Delete type=2 #5
+2026/03/07-18:42:17.633 1a684 Level-0 table #6: started
+2026/03/07-18:42:17.639 1a684 Level-0 table #6: 681700 bytes OK

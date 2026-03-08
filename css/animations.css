@@ -1,107 +1,29 @@
 /* ============================================================
-   animations.css — Keyframes and animation classes
+   animations.css - Only live strategy UI motion
    ============================================================ */
 
-/* ── Spinning avatar ring ── */
-@keyframes spin-ring {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+@keyframes toast-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-/* ── Combo pulse ── */
-@keyframes combo-pulse {
-  from { box-shadow: 0 0 10px rgba(255,201,75,0.2); }
-  to   { box-shadow: 0 0 25px rgba(255,201,75,0.5); }
+@keyframes modal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
-/* ── Clicker button click bounce ── */
-@keyframes click-bounce {
-  0%   { transform: scale(1); }
-  40%  { transform: scale(0.94) translateY(3px); }
-  70%  { transform: scale(1.04) translateY(-1px); }
-  100% { transform: scale(1) translateY(0); }
-}
-.click-animate { animation: click-bounce 0.22s ease; }
-
-/* ── Floating number ── */
-@keyframes float-up {
-  0%   { transform: translateY(0) scale(1); opacity: 1; }
-  60%  { transform: translateY(-60px) scale(1.15); opacity: 1; }
-  100% { transform: translateY(-100px) scale(0.8); opacity: 0; }
-}
-
-/* ── Promotion panel glow ── */
-@keyframes promo-glow {
-  from { box-shadow: 0 0 20px rgba(255,201,75,0.1), inset 0 1px 0 rgba(255,201,75,0.08); }
-  to   { box-shadow: 0 0 50px rgba(255,201,75,0.25), inset 0 1px 0 rgba(255,201,75,0.15); }
-}
-
-/* ── Achievement unlock flash ── */
-@keyframes ach-flash {
-  0%   { background: rgba(255,201,75,0.3); }
-  100% { background: transparent; }
-}
-.ach-unlock-flash { animation: ach-flash 0.6s ease; }
-
-/* ── Shake (for "can't afford") ── */
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  20%       { transform: translateX(-6px); }
-  40%       { transform: translateX(6px); }
-  60%       { transform: translateX(-4px); }
-  80%       { transform: translateX(4px); }
-}
-.shake-animate { animation: shake 0.35s ease; }
-
-/* ── Incident banner slide in ── */
-@keyframes slide-down {
-  from { transform: translateY(-100%); opacity: 0; }
-  to   { transform: translateY(0); opacity: 1; }
-}
-.incident-banner:not(.hidden) { animation: slide-down 0.35s ease; }
-
-/* ── Skill unlock ripple ── */
-@keyframes skill-ripple {
-  0%   { box-shadow: 0 0 0 0 rgba(74,222,128,0.5); }
-  100% { box-shadow: 0 0 0 20px rgba(74,222,128,0); }
-}
-.skill-unlock-ripple { animation: skill-ripple 0.6s ease; }
-
-/* ── Particle burst on click ── */
-.click-burst {
-  position: absolute;
-  top: 50%; left: 50%;
-  width: 0; height: 0;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(124,92,252,0.6), transparent 70%);
-  transform: translate(-50%, -50%) scale(0);
-  pointer-events: none;
-  z-index: 3;
-}
-.click-burst.pop {
-  animation: burst 0.4s ease forwards;
-}
-
-@keyframes burst {
-  0%   { width: 0; height: 0; opacity: 1; }
-  100% { width: 120px; height: 120px; opacity: 0; }
-}
-
-/* ── Idle income ticker pulse ── */
-@keyframes income-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.6; }
-}
-
-/* ── Level up flash ── */
-@keyframes level-flash {
-  0%   { box-shadow: 0 0 0 rgba(34,211,238,0); }
-  50%  { box-shadow: 0 0 60px rgba(34,211,238,0.6); }
-  100% { box-shadow: 0 0 0 rgba(34,211,238,0); }
-}
-.level-up-flash { animation: level-flash 0.8s ease; }
-
-/* ── Starfield (body pseudo) ── */
 body::before {
   content: '';
   position: fixed;
@@ -110,15 +32,26 @@ body::before {
   background-image:
     radial-gradient(1px 1px at 15% 25%, rgba(255,255,255,0.15) 0%, transparent 100%),
     radial-gradient(1px 1px at 45% 10%, rgba(255,255,255,0.12) 0%, transparent 100%),
-    radial-gradient(1px 1px at 75% 60%, rgba(255,255,255,0.1)  0%, transparent 100%),
+    radial-gradient(1px 1px at 75% 60%, rgba(255,255,255,0.10) 0%, transparent 100%),
     radial-gradient(1px 1px at 90% 20%, rgba(255,255,255,0.08) 0%, transparent 100%),
     radial-gradient(1px 1px at 60% 85%, rgba(255,255,255,0.13) 0%, transparent 100%),
     radial-gradient(1px 1px at 30% 70%, rgba(255,255,255,0.09) 0%, transparent 100%),
-    radial-gradient(1px 1px at 5%  50%, rgba(255,255,255,0.11) 0%, transparent 100%);
+    radial-gradient(1px 1px at 5% 50%, rgba(255,255,255,0.11) 0%, transparent 100%);
   z-index: 0;
 }
 
-#game-header, #incident-banner, #game-main, .toast-area, .float-layer {
+#game-header,
+#game-main,
+.toast-area,
+.modal {
   position: relative;
   z-index: 1;
+}
+
+.toast {
+  animation: toast-rise 0.18s ease;
+}
+
+.modal-panel {
+  animation: modal-pop 0.2s ease;
 }

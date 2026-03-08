@@ -1,0 +1,1137 @@
+/* ============================================================
+   main.js - Weekly strategy sim
+   ============================================================ */
+
+(() => {
+  const { CAREER, BOSS_ARCHETYPES, WEEKLY_ACTIONS, POLITICAL_MOVES, CONSEQUENCES, EVENT_TEMPLATES, STAFF_POOL } = window.GAME_DATA;
+  const SFX = window.SFX || {};
+  const SAVE_KEY = 'sdh_people_manager_v2';
+  const START_TEAM = 4;
+  const SLATE_SIZE = 3;
+  const ROSTER_PAGE_SIZE = 6;
+
+  let S = null;
+  let toastTimer = null;
+
+  const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+  const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
+  const fmtMoney = (n) => n >= 1000000 ? `$${(n / 1000000).toFixed(2)}M` : n >= 1000 ? `$${(n / 1000).toFixed(1)}K` : `$${Math.round(n).toLocaleString()}`;
+  const pct = (n) => `${Math.round(n)}%`;
+
+  const bonusByRarity = { common: 0, uncommon: 4, rare: 8, epic: 12, legendary: 18 };
+  const bossById = Object.fromEntries(BOSS_ARCHETYPES.map((boss) => [boss.id, boss]));
+
+  function currentCareer(state = S) { return CAREER[state.careerTier] || CAREER[0]; }
+  function weeklyPay(state = S) { return currentCareer(state).annualSalary / 52; }
+  function currentBoss(state = S) { return bossById[state.bossState.archetypeId] || BOSS_ARCHETYPES[0]; }
+  function getOpenHeadcount(state = S) { return Math.max(0, currentCareer(state).headcount - state.staffState.length); }
+  function getOpenSupervisorSlots(state = S) { return Math.max(0, currentCareer(state).supervisorSlots - state.staffState.filter((s) => s.isSupervisor).length); }
+  function getSupervisorCapacity(state = S) { return state.careerTier >= 7 ? 7 : state.careerTier >= 5 ? 6 : 5; }
+  function staffById(id, state = S) { return state.staffState.find((staff) => staff.id === id) || null; }
+  function candidateById(id, state = S) { return state.candidateSlate.find((staff) => staff.id === id) || null; }
+  function directReports(managerId, state = S) { return state.staffState.filter((staff) => staff.managerId === managerId); }
+  function average(items, key) { return items.length ? items.reduce((sum, item) => sum + item[key], 0) / items.length : 0; }
+  function makeId(prefix) { return `${prefix}_${Math.random().toString(36).slice(2, 9)}`; }
+  function totalPayroll(state = S) { return state.staffState.reduce((sum, staff) => sum + staff.annualSalary, 0); }
+  function headcountFillPct(state = S) { return currentCareer(state).headcount ? clamp(Math.round((state.staffState.length / currentCareer(state).headcount) * 100), 0, 100) : 100; }
+  function supervisorCoveragePct(state = S) {
+    const slots = currentCareer(state).supervisorSlots;
+    if (!slots) return 100;
+    return clamp(Math.round((state.staffState.filter((staff) => staff.isSupervisor).length / slots) * 100), 0, 100);
+  }
+  function paperworkHealth(state = S) { return clamp(Math.round(average(state.staffState, 'paperwork') || 0), 0, 100); }
+  function benchStrength(state = S) {
+    const competence = average(state.staffState, 'competence') || 0;
+    const management = average(state.staffState, 'managerRelationship') || 0;
+    return clamp(Math.round(headcountFillPct(state) * 0.42 + supervisorCoveragePct(state) * 0.18 + competence * 0.25 + management * 0.15), 0, 100);
+  }
+  function attentionScore(staff) {
+    return (
+      (staff.isSupervisor ? 16 : 0) +
+      (100 - staff.morale) * 0.34 +
+      staff.burnout * 0.36 +
+      (100 - staff.paperwork) * 0.22 +
+      (staff.flags.includes('flight-risk') ? 12 : 0)
+    );
+  }
+  function orderedStaff(state = S) {
+    return [...state.staffState].sort((a, b) => attentionScore(b) - attentionScore(a) || b.competence - a.competence || a.name.localeCompare(b.name));
+  }
+  function totalRosterPages(state = S) { return Math.max(1, Math.ceil(state.staffState.length / ROSTER_PAGE_SIZE)); }
+  function normalizeRosterPage(state = S) { state.rosterPage = clamp(state.rosterPage || 0, 0, totalRosterPages(state) - 1); }
+  function syncRosterPageToSelection(state = S) {
+    normalizeRosterPage(state);
+    if (!state.selectedStaffId) return;
+    const roster = orderedStaff(state);
+    const index = roster.findIndex((staff) => staff.id === state.selectedStaffId);
+    if (index >= 0) state.rosterPage = Math.floor(index / ROSTER_PAGE_SIZE);
+  }
+  function visibleRoster(state = S) {
+    normalizeRosterPage(state);
+    const roster = orderedStaff(state);
+    const start = state.rosterPage * ROSTER_PAGE_SIZE;
+    return roster.slice(start, start + ROSTER_PAGE_SIZE);
+  }
+
+  function shiftAllStaff(field, delta) {
+    S.staffState.forEach((staff) => { staff[field] = clamp(staff[field] + delta, 0, 100); });
+  }
+
+  function recomputeMorale() {
+    S.morale = clamp(Math.round(average(S.staffState, 'morale') || 0), 0, 100);
+  }
+
+  function pickFlags(template) {
+    const flags = [];
+    if (template.workload >= 3.2 || template.rarity === 'epic' || template.rarity === 'legendary') flags.push('high-performer');
+    if (Math.random() < 0.18) flags.push('bullshitter');
+    if (Math.random() < 0.18) flags.push('hidden-problem');
+    if (Math.random() < 0.14) flags.push('flight-risk');
+    if (!flags.length) flags.push(pick(['steady', 'steady', 'steady', 'burned-out']));
+    return flags;
+  }
+
+  function buildStaff(template, managerId = 'player') {
+    const competence = clamp(Math.round(42 + template.workload * 9 + (bonusByRarity[template.rarity] || 0) + rand(-4, 6)), 35, 95);
+    const annualSalary = Math.round(52000 + template.workload * 9000 + (bonusByRarity[template.rarity] || 0) * 1800 + rand(-4000, 6000));
+    const paperwork = clamp(Math.round(46 + rand(-8, 18) + (template.specialty === 'process' ? 16 : 0) + (template.skills.includes('Compliance') ? 10 : 0)), 30, 96);
+    return {
+      id: makeId(template.id),
+      poolId: template.id,
+      name: template.name,
+      role: template.role,
+      emoji: template.emoji,
+      rarity: template.rarity,
+      skills: template.skills || [],
+      managerId,
+      isSupervisor: false,
+      competence,
+      morale: rand(56, 74),
+      burnout: rand(10, 26),
+      paperwork,
+      loyalty: rand(48, 72),
+      managerRelationship: rand(46, 70),
+      annualSalary,
+      flags: pickFlags(template),
+      notes: template.notes,
+    };
+  }
+
+  function usedPoolIds(state) {
+    return new Set([...state.staffState, ...state.candidateSlate].map((item) => item.poolId));
+  }
+
+  function chooseCandidates(state) {
+    if (getOpenHeadcount(state) <= 0 || state.weeklyFlags.freezeHiring) {
+      state.candidateSlate = [];
+      state.selectedCandidateId = null;
+      return;
+    }
+    const used = usedPoolIds(state);
+    const pool = STAFF_POOL.filter((template) => !used.has(template.id));
+    state.candidateSlate = shuffle(pool).slice(0, SLATE_SIZE).map((template) => buildStaff(template, null));
+    state.selectedCandidateId = state.candidateSlate[0] ? state.candidateSlate[0].id : null;
+  }
+
+  function getWeakestMetric(state = S) {
+    const entries = [
+      ['backlog', 100 - state.backlog],
+      ['morale', state.morale],
+      ['budgetHealth', state.budgetHealth],
+      ['compliance', state.compliance],
+      ['politicalCapital', state.politicalCapital],
+    ].sort((a, b) => a[1] - b[1]);
+    return entries[0][0];
+  }
+
+  function metricCategory(state = S) {
+    const weak = getWeakestMetric(state);
+    if (weak === 'backlog') return pick(['boss', 'hr']);
+    if (weak === 'budgetHealth') return 'finance';
+    if (weak === 'compliance') return 'audit';
+    if (weak === 'morale') return 'hr';
+    if (weak === 'politicalCapital') return 'boss';
+    return pick(['boss', 'finance', 'audit', 'hr']);
+  }
+
+  function applyEffects(effects = {}) {
+    Object.entries(effects).forEach(([key, value]) => {
+      if (key === 'actionPoints') return void (S.actionPoints = Math.max(0, S.actionPoints + value));
+      if (key === 'morale') {
+        shiftAllStaff('morale', value);
+        return void recomputeMorale();
+      }
+      if (key === 'paperwork') return void shiftAllStaff('paperwork', value);
+      if (key === 'backlog') S.backlog = clamp(S.backlog + value, 0, 100);
+      if (key === 'budgetHealth') S.budgetHealth = clamp(S.budgetHealth + value, 0, 100);
+      if (key === 'compliance') S.compliance = clamp(S.compliance + value, 0, 100);
+      if (key === 'politicalCapital') S.politicalCapital = clamp(S.politicalCapital + value, 0, 100);
+      if (key === 'narrativeDebt') S.narrativeDebt = clamp(S.narrativeDebt + value, 0, 100);
+      if (key === 'promotionPressure') S.promotionPressure = clamp(S.promotionPressure + value, 0, 100);
+    });
+  }
+
+  function enqueueConsequence(id) {
+    const template = CONSEQUENCES[id];
+    if (template) S.pendingConsequences.push({ id, weeksLeft: template.delayWeeks });
+  }
+
+  function logWeek(text, tone = 'neutral') {
+    S.weekLog.unshift({ week: S.week, text, tone });
+    S.weekLog = S.weekLog.slice(0, 12);
+  }
+
+  function addModifier(text) {
+    S.weeklyModifiers.unshift(text);
+    S.weeklyModifiers = S.weeklyModifiers.slice(0, 4);
+  }
+
+  function applyConsequence(entry) {
+    const template = CONSEQUENCES[entry.id];
+    if (!template) return;
+    applyEffects(template.effects);
+    if (entry.id === 'burnout_wave') {
+      shuffle(S.staffState).slice(0, 2).forEach((staff) => {
+        staff.burnout = clamp(staff.burnout + 16, 0, 100);
+        staff.morale = clamp(staff.morale - 8, 0, 100);
+      });
+      recomputeMorale();
+    }
+    if (entry.id === 'canceled_one_on_ones') {
+      const target = pick(S.staffState.filter((staff) => !staff.isSupervisor));
+      if (target && !target.flags.includes('flight-risk')) target.flags.push('flight-risk');
+    }
+    if (entry.id === 'shadow_ai_blowback') {
+      const target = pick(S.staffState);
+      if (target && !target.flags.includes('hidden-problem')) target.flags.push('hidden-problem');
+    }
+    addModifier(template.log);
+    logWeek(template.log, 'risk');
+  }
+
+  function processConsequences() {
+    const keep = [];
+    S.pendingConsequences.forEach((entry) => {
+      entry.weeksLeft -= 1;
+      if (entry.weeksLeft <= 0) applyConsequence(entry);
+      else keep.push(entry);
+    });
+    S.pendingConsequences = keep;
+  }
+
+  function makeEvent(category, usedIds = new Set()) {
+    const pool = (EVENT_TEMPLATES[category] || []).filter((item) => !usedIds.has(item.id));
+    if (!pool.length) return null;
+    const template = pick(pool);
+    const event = {
+      id: makeId(template.id),
+      templateId: template.id,
+      category,
+      title: template.title,
+      summary: template.summary,
+      mandatory: !!template.mandatory,
+      resolved: false,
+      chosenLabel: '',
+      choices: template.choices || [],
+      autoEffects: template.autoEffects || null,
+    };
+    if (category === 'news') {
+      event.resolved = true;
+      event.chosenLabel = 'Ambient nonsense';
+      applyEffects(event.autoEffects || {});
+      addModifier(`${event.title}: ${event.summary}`);
+      logWeek(event.title, 'news');
+    }
+    return event;
+  }
+
+  function timesheetProfile(staff) {
+    const hours = rand(38, staff.burnout > 72 ? 50 : 46);
+    const risk =
+      (100 - staff.paperwork) * 0.45 +
+      (staff.burnout > 70 ? 14 : 0) +
+      (staff.flags.includes('bullshitter') ? 12 : 0) +
+      (staff.flags.includes('hidden-problem') ? 8 : 0) +
+      rand(-6, 12);
+    if (risk > 58) {
+      return {
+        issue: 'ghost_hours',
+        summary: `${staff.name} submitted ${hours} hours with overtime and notes that do not match the ticket trail.`,
+        choices: [
+          { id: 'approve', label: 'Approve It', summary: 'Move the stack and hope nobody checks the details.', effects: { compliance: -7, narrativeDebt: 6, politicalCapital: 1 } },
+          { id: 'investigate', label: 'Investigate', summary: 'Escalate the mismatch before Audit does.', effects: { compliance: 6, backlog: 2, morale: -5, promotionPressure: 2 } },
+          { id: 'supervisor', label: 'Supervisor Fix', summary: 'Bounce it through the manager for corrected notes.', effects: { compliance: 4, politicalCapital: 2, morale: -2 } },
+        ],
+      };
+    }
+    if (risk > 40) {
+      return {
+        issue: 'missing_codes',
+        summary: `${staff.name} logged ${hours} hours but skipped cost center or project codes on multiple entries.`,
+        choices: [
+          { id: 'approve', label: 'Approve Anyway', summary: 'Protect speed and accept softer controls.', effects: { compliance: -4, narrativeDebt: 4, politicalCapital: 1 } },
+          { id: 'fix', label: 'Send Back', summary: 'Force clean coding before payroll closes.', effects: { compliance: 5, backlog: 1, morale: -2 } },
+          { id: 'coach', label: 'Fix Together', summary: 'Correct it with a coaching note and keep momentum.', effects: { compliance: 2, promotionPressure: 1 } },
+        ],
+      };
+    }
+    if (hours > 44 || risk > 28) {
+      return {
+        issue: 'overtime',
+        summary: `${staff.name} submitted ${hours} hours and flagged after-hours queue coverage.`,
+        choices: [
+          { id: 'approve', label: 'Approve OT', summary: 'Pay for the hours and keep the queue moving.', effects: { compliance: 3, backlog: -2, budgetHealth: -4, morale: 2 } },
+          { id: 'comp_time', label: 'Trade Comp Time', summary: 'Avoid payroll pain now and absorb queue pain later.', effects: { budgetHealth: 2, backlog: 2, morale: 1, narrativeDebt: 2 } },
+          { id: 'kickback', label: 'Push Back', summary: 'Challenge the claim and risk a morale hit.', effects: { compliance: 2, backlog: 2, morale: -4 } },
+        ],
+      };
+    }
+    return {
+      issue: 'clean',
+      summary: `${staff.name} submitted ${hours} hours with clean notes, solid codes, and no surprises.`,
+      choices: [
+        { id: 'approve', label: 'Approve', summary: 'Reward good paperwork and keep things moving.', effects: { compliance: 4, politicalCapital: 1, promotionPressure: 1 } },
+        { id: 'nudge', label: 'Approve + Note', summary: 'Approve it with a manager note to keep the bar high.', effects: { compliance: 3, promotionPressure: 1 } },
+        { id: 'kickback', label: 'Kick Back', summary: 'Ask for a revision even though it mostly looks fine.', effects: { compliance: 1, backlog: 1, morale: -2 } },
+      ],
+    };
+  }
+
+  function buildTimesheetEvent(staff) {
+    const profile = timesheetProfile(staff);
+    return {
+      id: makeId('timesheet'),
+      templateId: `timesheet_${profile.issue}_${staff.id}`,
+      category: 'timesheet',
+      title: `Timesheet: ${staff.name}`,
+      summary: profile.summary,
+      mandatory: true,
+      resolved: false,
+      chosenLabel: '',
+      choices: profile.choices,
+      meta: { kind: 'timesheet', issue: profile.issue, staffId: staff.id },
+    };
+  }
+
+  function applyTimesheetOutcome(event, choice) {
+    if (event.meta?.kind !== 'timesheet') return;
+    const staff = staffById(event.meta.staffId);
+    if (!staff) return;
+    const issue = event.meta.issue;
+    if (issue === 'clean') {
+      if (choice.id === 'approve') {
+        staff.paperwork = clamp(staff.paperwork + 4, 0, 100);
+        staff.managerRelationship = clamp(staff.managerRelationship + 3, 0, 100);
+      } else if (choice.id === 'nudge') {
+        staff.paperwork = clamp(staff.paperwork + 5, 0, 100);
+        staff.managerRelationship = clamp(staff.managerRelationship + 1, 0, 100);
+      } else {
+        staff.managerRelationship = clamp(staff.managerRelationship - 4, 0, 100);
+        staff.morale = clamp(staff.morale - 3, 0, 100);
+      }
+    }
+    if (issue === 'overtime') {
+      if (choice.id === 'approve') {
+        staff.morale = clamp(staff.morale + 4, 0, 100);
+        staff.burnout = clamp(staff.burnout + 3, 0, 100);
+      } else if (choice.id === 'comp_time') {
+        staff.burnout = clamp(staff.burnout - 4, 0, 100);
+        staff.managerRelationship = clamp(staff.managerRelationship + 1, 0, 100);
+      } else {
+        staff.morale = clamp(staff.morale - 5, 0, 100);
+        staff.managerRelationship = clamp(staff.managerRelationship - 5, 0, 100);
+      }
+    }
+    if (issue === 'missing_codes') {
+      if (choice.id === 'approve') {
+        staff.paperwork = clamp(staff.paperwork - 4, 0, 100);
+      } else if (choice.id === 'fix') {
+        staff.paperwork = clamp(staff.paperwork + 6, 0, 100);
+        staff.managerRelationship = clamp(staff.managerRelationship - 2, 0, 100);
+      } else {
+        staff.paperwork = clamp(staff.paperwork + 4, 0, 100);
+        staff.managerRelationship = clamp(staff.managerRelationship + 2, 0, 100);
+      }
+    }
+    if (issue === 'ghost_hours') {
+      if (choice.id === 'approve') {
+        staff.paperwork = clamp(staff.paperwork - 8, 0, 100);
+      } else if (choice.id === 'investigate') {
+        staff.paperwork = clamp(staff.paperwork + 2, 0, 100);
+        staff.managerRelationship = clamp(staff.managerRelationship - 4, 0, 100);
+        if (!staff.flags.includes('hidden-problem')) staff.flags.push('hidden-problem');
+      } else {
+        staff.paperwork = clamp(staff.paperwork + 5, 0, 100);
+        staff.managerRelationship = clamp(staff.managerRelationship - 1, 0, 100);
+      }
+    }
+    recomputeMorale();
+  }
+
+  function buildPoliticalMoves() {
+    const ids = ['tell_truth', 'spin_boss'];
+    if (getOpenHeadcount() > 0) ids.push('freeze_hiring');
+    else if (S.compliance < 52) ids.push('skip_time_tracking');
+    else if (S.backlog > 62) ids.push('midnight_oil');
+    else ids.push('hide_backlog');
+    return [...new Set(ids)].slice(0, 3);
+  }
+
+  function buildBossState() {
+    const boss = BOSS_ARCHETYPES[Math.min(BOSS_ARCHETYPES.length - 1, Math.floor(S.careerTier / 2))] || BOSS_ARCHETYPES[0];
+    const moodScore = computePromotionScore() - Math.round(S.narrativeDebt * 0.15) - (S.pipStatus ? 10 : 0) - S.warningCount * 5;
+    return {
+      archetypeId: boss.id,
+      mood: moodScore >= 70 ? boss.moods[0] : moodScore >= 45 ? boss.moods[1] : boss.moods[2],
+      ask: pick(boss.asks),
+      needsExplanation: S.backlog > 68 || S.narrativeDebt > 55 || S.warningCount > 0 || S.pipStatus,
+      availableMoves: buildPoliticalMoves(),
+    };
+  }
+
+  function generateWeeklyInbox() {
+    const usedIds = new Set();
+    const inbox = [];
+    const timesheetCount = S.careerTier >= 2 || S.staffState.length > 6 ? 2 : 1;
+    const timesheetPool = shuffle(orderedStaff(S).slice(0, Math.min(8, S.staffState.length)));
+    timesheetPool.slice(0, timesheetCount).forEach((staff) => inbox.push(buildTimesheetEvent(staff)));
+
+    const managementEvent = makeEvent(metricCategory(), usedIds);
+    if (managementEvent) {
+      usedIds.add(managementEvent.templateId);
+      inbox.push(managementEvent);
+    }
+
+    if (S.warningCount > 0 || S.narrativeDebt > 58) {
+      const followUp = makeEvent(S.compliance < 48 ? 'audit' : pick(['boss', 'finance', 'hr']), usedIds);
+      if (followUp) {
+        usedIds.add(followUp.templateId);
+        inbox.push(followUp);
+      }
+    }
+
+    return inbox.slice(0, 3);
+  }
+
+  function chooseManagerForHire() {
+    const supervisors = S.staffState.filter((staff) => staff.isSupervisor);
+    if (!supervisors.length) return 'player';
+    const capacity = getSupervisorCapacity();
+    const managerLoad = [{ id: 'player', load: directReports('player').length }].concat(supervisors.map((staff) => ({ id: staff.id, load: directReports(staff.id).length }))).sort((a, b) => a.load - b.load);
+    const open = managerLoad.find((entry) => entry.id === 'player' || entry.load < capacity);
+    return open ? open.id : managerLoad[0].id;
+  }
+
+  function rebalanceReports() {
+    const supervisors = S.staffState.filter((staff) => staff.isSupervisor);
+    if (!supervisors.length) {
+      S.staffState.forEach((staff) => { if (!staff.isSupervisor) staff.managerId = 'player'; });
+      return;
+    }
+    const capacity = getSupervisorCapacity();
+    const managed = supervisors.map((supervisor) => ({ id: supervisor.id, load: 0 }));
+    S.staffState.filter((staff) => !staff.isSupervisor).forEach((staff) => {
+      const preferred = managed.find((entry) => entry.id === staff.managerId && entry.load < capacity);
+      if (preferred) return void (preferred.load += 1);
+      managed.sort((a, b) => a.load - b.load);
+      if (directReports('player').length < capacity) staff.managerId = 'player';
+      else {
+        staff.managerId = managed[0].id;
+        managed[0].load += 1;
+      }
+    });
+  }
+
+  function prepareWeek(initial = false) {
+    processConsequences();
+    S.actionPoints = currentCareer().weeklyAP;
+    S.weeklyActionsTaken = [];
+    S.weeklyModifiers = [];
+    S.weeklyFlags = { usedPoliticalMove: false, freezeHiring: false, reviewRequested: false, midnightOil: false };
+    chooseCandidates(S);
+    S.weeklyInbox = generateWeeklyInbox();
+    S.bossState = buildBossState();
+    recomputeMorale();
+    if (!S.selectedStaffId || !staffById(S.selectedStaffId)) S.selectedStaffId = S.staffState[0] ? S.staffState[0].id : null;
+    if (!S.selectedCandidateId || !candidateById(S.selectedCandidateId)) S.selectedCandidateId = S.candidateSlate[0] ? S.candidateSlate[0].id : null;
+    if (typeof S.rosterPage !== 'number') S.rosterPage = 0;
+    syncRosterPageToSelection();
+    if (initial) logWeek('You inherited a service desk pod that works just well enough to fail upward or implode.', 'neutral');
+  }
+
+  function buildFreshState(meta = {}) {
+    const starters = shuffle(STAFF_POOL).slice(0, START_TEAM).map((template) => buildStaff(template, 'player'));
+    return {
+      saveVersion: SAVE_KEY,
+      week: 1,
+      careerTier: 0,
+      actionPoints: CAREER[0].weeklyAP,
+      backlog: 52,
+      morale: 62,
+      budgetHealth: 56,
+      compliance: 46,
+      politicalCapital: meta.politicalCapital ?? 34,
+      narrativeDebt: meta.narrativeDebt ?? 8,
+      promotionPressure: 0,
+      warningCount: 0,
+      pipStatus: false,
+      demotions: 0,
+      firings: meta.firings || 0,
+      lifetimeEarnings: meta.lifetimeEarnings || 0,
+      staffState: starters,
+      candidateSlate: [],
+      bossState: { archetypeId: BOSS_ARCHETYPES[0].id, mood: '', ask: '', needsExplanation: false, availableMoves: [] },
+      weeklyInbox: [],
+      weeklyActionsTaken: [],
+      weeklyModifiers: [],
+      pendingConsequences: meta.pendingConsequences || [],
+      selectedStaffId: starters[0] ? starters[0].id : null,
+      selectedCandidateId: null,
+      rosterPage: 0,
+      weekLog: meta.weekLog || [],
+      weeklyFlags: {},
+      lastFiredReason: '',
+      isFired: false,
+    };
+  }
+
+  function saveGame(label = 'Saved') {
+    if (!S) return;
+    localStorage.setItem(SAVE_KEY, JSON.stringify(S));
+    const indicator = document.getElementById('save-indicator');
+    if (!indicator) return;
+    indicator.textContent = label;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { indicator.textContent = 'Saved'; }, 1500);
+  }
+
+  function loadGame() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && parsed.saveVersion === SAVE_KEY ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function toast(message, tone = 'neutral') {
+    const area = document.getElementById('toast-area');
+    if (!area) return;
+    const node = document.createElement('div');
+    node.className = `toast ${tone}`;
+    node.textContent = message;
+    area.prepend(node);
+    setTimeout(() => node.remove(), 2800);
+  }
+
+  function spendAP(cost) {
+    if (S.actionPoints < cost) {
+      toast('Not enough AP this week.', 'bad');
+      if (SFX.error) SFX.error();
+      return false;
+    }
+    S.actionPoints -= cost;
+    return true;
+  }
+
+  function recordAction(label) {
+    S.weeklyActionsTaken.unshift(label);
+    S.weeklyActionsTaken = S.weeklyActionsTaken.slice(0, 5);
+    addModifier(label);
+  }
+
+  function canUseAction(action) {
+    if (S.actionPoints < action.apCost) return 'Not enough AP';
+    if (action.target === 'staff' && !staffById(S.selectedStaffId)) return 'Select an employee';
+    if (action.target === 'candidate' && !candidateById(S.selectedCandidateId)) return 'Select a candidate';
+    if (action.id === 'approve_offer' && getOpenHeadcount() <= 0) return 'No open headcount';
+    if (action.id === 'approve_offer' && S.weeklyFlags.freezeHiring) return 'Hiring is frozen this week';
+    if (action.id === 'promote_supervisor') {
+      const staff = staffById(S.selectedStaffId);
+      if (!staff) return 'Select an employee';
+      if (staff.isSupervisor) return 'Already a supervisor';
+      if (getOpenSupervisorSlots() <= 0) return 'No supervisor slot';
+      if (staff.competence < 62) return 'Needs more competence';
+      if (S.careerTier < 1) return 'Promote first';
+    }
+    if (action.id === 'fire_employee') {
+      const staff = staffById(S.selectedStaffId);
+      if (!staff || staff.isSupervisor) return 'Select a non-supervisor';
+    }
+    if (action.id === 'fire_supervisor') {
+      const staff = staffById(S.selectedStaffId);
+      if (!staff || !staff.isSupervisor) return 'Select a supervisor';
+    }
+    if (action.id === 'ask_review' && S.weeklyFlags.reviewRequested) return 'Already asked this week';
+    return '';
+  }
+
+  function performAction(id) {
+    const action = WEEKLY_ACTIONS.find((item) => item.id === id);
+    if (!action) return;
+    const blocked = canUseAction(action);
+    if (blocked) {
+      toast(blocked, 'bad');
+      if (SFX.error) SFX.error();
+      return;
+    }
+    if (!spendAP(action.apCost)) return;
+    const staff = staffById(S.selectedStaffId);
+    const candidate = candidateById(S.selectedCandidateId);
+
+    switch (id) {
+      case 'work_tickets':
+        applyEffects({ backlog: -8, politicalCapital: 1 });
+        shiftAllStaff('burnout', 1);
+        recordAction('Covered the queue yourself to keep the team from absorbing all of it.');
+        break;
+      case 'reporting':
+        applyEffects({ politicalCapital: 6, compliance: 2, backlog: 1, promotionPressure: 4 });
+        recordAction('Built a headcount case that leadership can repeat back to itself.');
+        break;
+      case 'budgeting':
+        applyEffects({ budgetHealth: 8, politicalCapital: 2, morale: -1 });
+        recordAction('Updated the staffing forecast before Finance did it for you.');
+        break;
+      case 'time_tracking':
+        applyEffects({ compliance: 8, paperwork: 4, backlog: 1, promotionPressure: 3 });
+        recordAction('Cleared the approval stack before Audit turned it into a project.');
+        break;
+      case 'one_on_one':
+        staff.morale = clamp(staff.morale + 14, 0, 100);
+        staff.loyalty = clamp(staff.loyalty + 10, 0, 100);
+        staff.managerRelationship = clamp(staff.managerRelationship + 10, 0, 100);
+        staff.burnout = clamp(staff.burnout - 8, 0, 100);
+        staff.paperwork = clamp(staff.paperwork + 4, 0, 100);
+        if (staff.flags.includes('hidden-problem')) {
+          staff.flags = staff.flags.filter((flag) => flag !== 'hidden-problem');
+          applyEffects({ backlog: -3, compliance: 2 });
+          recordAction(`Coached ${staff.name} and surfaced a hidden issue before it spread.`);
+        } else recordAction(`Coached ${staff.name}.`);
+        recomputeMorale();
+        break;
+      case 'approve_offer': {
+        const hire = { ...candidate, managerId: chooseManagerForHire() };
+        S.staffState.push(hire);
+        S.candidateSlate = S.candidateSlate.filter((item) => item.id !== candidate.id);
+        S.selectedCandidateId = S.candidateSlate[0] ? S.candidateSlate[0].id : null;
+        applyEffects({ budgetHealth: -5, backlog: -4, politicalCapital: 2, morale: 1, promotionPressure: 2 });
+        recordAction(`Approved an offer for ${hire.name}.`);
+        if (SFX.hire) SFX.hire();
+        break;
+      }
+      case 'approve_raise':
+        staff.annualSalary = Math.round(staff.annualSalary * 1.08);
+        staff.morale = clamp(staff.morale + 18, 0, 100);
+        staff.loyalty = clamp(staff.loyalty + 12, 0, 100);
+        staff.managerRelationship = clamp(staff.managerRelationship + 8, 0, 100);
+        staff.paperwork = clamp(staff.paperwork + 2, 0, 100);
+        applyEffects({ budgetHealth: -6, politicalCapital: 1 });
+        recomputeMorale();
+        recordAction(`Approved a raise for ${staff.name}.`);
+        break;
+      case 'promote_supervisor':
+        staff.isSupervisor = true;
+        staff.role = `Supervisor - ${staff.role}`;
+        staff.annualSalary = Math.round(staff.annualSalary * 1.14);
+        staff.loyalty = clamp(staff.loyalty + 10, 0, 100);
+        staff.managerRelationship = clamp(staff.managerRelationship + 8, 0, 100);
+        staff.paperwork = clamp(staff.paperwork + 4, 0, 100);
+        applyEffects({ politicalCapital: 5, budgetHealth: -4, morale: 3, promotionPressure: 3 });
+        rebalanceReports();
+        recordAction(`Promoted ${staff.name} to supervisor.`);
+        if (SFX.advance) SFX.advance();
+        break;
+      case 'fire_employee': {
+        const name = staff.name;
+        S.staffState = S.staffState.filter((item) => item.id !== staff.id);
+        applyEffects({ budgetHealth: 8, morale: -12, backlog: 8, narrativeDebt: 6, politicalCapital: S.budgetHealth < 40 ? 2 : -4 });
+        recomputeMorale();
+        recordAction(`Fired ${name}.`);
+        break;
+      }
+      case 'fire_supervisor': {
+        const name = staff.name;
+        S.staffState.filter((item) => item.managerId === staff.id).forEach((item) => { item.managerId = 'player'; });
+        S.staffState = S.staffState.filter((item) => item.id !== staff.id);
+        applyEffects({ budgetHealth: 12, morale: -18, backlog: 10, narrativeDebt: 8, politicalCapital: 4 });
+        rebalanceReports();
+        recomputeMorale();
+        recordAction(`Fired supervisor ${name}.`);
+        break;
+      }
+      case 'ask_review': {
+        const score = computePromotionScore();
+        S.weeklyFlags.reviewRequested = true;
+        if (score >= currentCareer().promotionTarget - 6 && !S.pipStatus) {
+          applyEffects({ politicalCapital: 6, promotionPressure: 18 });
+          recordAction('Made the promotion case when the org looked stable enough to sell.');
+        } else {
+          applyEffects({ politicalCapital: -6, narrativeDebt: 1 });
+          recordAction('Made the Director case too early and leadership noticed.');
+        }
+        break;
+      }
+    }
+
+    if (!staffById(S.selectedStaffId)) S.selectedStaffId = S.staffState[0] ? S.staffState[0].id : null;
+    syncRosterPageToSelection();
+    saveGame('Autosaved');
+    renderAll();
+  }
+  function performPoliticalMove(id) {
+    if (S.weeklyFlags.usedPoliticalMove) {
+      toast('You already spent your weekly political move.', 'bad');
+      return;
+    }
+    const move = POLITICAL_MOVES.find((item) => item.id === id);
+    if (!move) return;
+    if (!spendAP(move.apCost)) return;
+
+    switch (id) {
+      case 'tell_truth':
+        applyEffects({ politicalCapital: -4, narrativeDebt: -8, compliance: 3, promotionPressure: 4 });
+        enqueueConsequence('truth_respect');
+        recordAction('Told leadership the clean version and let the numbers stand on their own.');
+        break;
+      case 'spin_boss':
+        applyEffects({ politicalCapital: 9, narrativeDebt: 8, compliance: -1 });
+        recordAction('Managed up with a cleaner story than the org really earned.');
+        break;
+      case 'hide_backlog':
+        applyEffects({ politicalCapital: 8, narrativeDebt: 10 });
+        enqueueConsequence('hidden_backlog');
+        recordAction('Hid queue pain behind a stabilization narrative.');
+        break;
+      case 'freeze_hiring':
+        applyEffects({ budgetHealth: 8, morale: -5, narrativeDebt: 4 });
+        enqueueConsequence('frozen_hiring');
+        S.weeklyFlags.freezeHiring = true;
+        S.candidateSlate = [];
+        S.selectedCandidateId = null;
+        recordAction('Froze hiring and called it fiscal discipline.');
+        break;
+      case 'skip_time_tracking':
+        applyEffects({ actionPoints: 1, compliance: -8, narrativeDebt: 7 });
+        enqueueConsequence('skipped_tracking');
+        recordAction('Skipped timesheet cleanup and converted audit risk into free time.');
+        break;
+      case 'cancel_one_on_ones':
+        applyEffects({ actionPoints: 1, morale: -7, narrativeDebt: 6 });
+        enqueueConsequence('canceled_one_on_ones');
+        recordAction('Canceled 1:1s and converted trust into free AP.');
+        break;
+      case 'blame_vendor':
+        applyEffects({ politicalCapital: 6, narrativeDebt: 7 });
+        enqueueConsequence('vendor_receipts');
+        recordAction('Blamed the vendor. This usually works right up until it does not.');
+        break;
+      case 'midnight_oil':
+        applyEffects({ backlog: -8, politicalCapital: 4, morale: -6, narrativeDebt: 5 });
+        enqueueConsequence('burnout_wave');
+        S.weeklyFlags.midnightOil = true;
+        recordAction('Pushed overtime and called it a leadership moment.');
+        break;
+    }
+
+    S.weeklyFlags.usedPoliticalMove = true;
+    saveGame('Autosaved');
+    renderAll();
+  }
+
+  function resolveInboxChoice(eventId, choiceId) {
+    const event = S.weeklyInbox.find((item) => item.id === eventId);
+    if (!event || event.resolved) return;
+    const choice = event.choices.find((item) => item.id === choiceId);
+    if (!choice) return;
+    applyEffects(choice.effects);
+    applyTimesheetOutcome(event, choice);
+    if (choice.consequence) enqueueConsequence(choice.consequence);
+    event.resolved = true;
+    event.chosenLabel = choice.label;
+    recordAction(`${event.title}: ${choice.label}.`);
+    if (SFX.confirm) SFX.confirm();
+    saveGame('Autosaved');
+    renderAll();
+  }
+
+  function unresolvedMandatory() {
+    return S.weeklyInbox.filter((item) => item.mandatory && !item.resolved).length;
+  }
+
+  function computePromotionScore() {
+    const score =
+      S.politicalCapital * 0.24 +
+      (100 - S.backlog) * 0.18 +
+      S.budgetHealth * 0.16 +
+      S.compliance * 0.16 +
+      S.morale * 0.12 +
+      benchStrength() * 0.14;
+    const paperworkBonus = paperworkHealth() * 0.06;
+    const debtPenalty = Math.max(0, S.narrativeDebt - 36) * 0.28;
+    const warningPenalty = S.warningCount * 4 + (S.pipStatus ? 8 : 0);
+    return clamp(Math.round(score + paperworkBonus - debtPenalty - warningPenalty), 0, 100);
+  }
+
+  function teamDelivery() {
+    const total = S.staffState.reduce((sum, staff) => {
+      const effectiveness = staff.competence * (0.55 + staff.morale / 200) * (1 - staff.burnout / 160);
+      return sum + Math.max(0, effectiveness);
+    }, 0);
+    const supervisorBonus = S.staffState.filter((staff) => staff.isSupervisor).reduce((sum, staff) => sum + staff.competence * 0.12, 0);
+    return Math.round(total / 22 + supervisorBonus / 14);
+  }
+
+  function applyStaffDrift() {
+    S.staffState.forEach((staff) => {
+      const moraleDrift = (S.backlog > 72 ? -5 : S.backlog > 58 ? -2 : 0) + (S.weeklyFlags.freezeHiring ? -2 : 0);
+      const burnoutDrift = S.weeklyFlags.midnightOil ? 12 : S.backlog > 65 ? 4 : -2;
+      const paperworkDrift = S.weeklyFlags.midnightOil ? -4 : staff.burnout > 72 ? -2 : 0;
+      staff.morale = clamp(staff.morale + moraleDrift, 0, 100);
+      staff.burnout = clamp(staff.burnout + burnoutDrift, 0, 100);
+      staff.paperwork = clamp(staff.paperwork + paperworkDrift, 0, 100);
+      staff.managerRelationship = clamp(staff.managerRelationship + (S.weeklyFlags.usedPoliticalMove ? -1 : 1), 0, 100);
+      if (staff.burnout > 78 && !staff.flags.includes('flight-risk')) staff.flags.push('flight-risk');
+    });
+    recomputeMorale();
+  }
+
+  function maybeQuitter() {
+    const risky = S.staffState.filter((staff) => !staff.isSupervisor && (staff.morale < 24 || staff.burnout > 88 || (staff.flags.includes('flight-risk') && staff.morale < 40)));
+    if (!risky.length || Math.random() > 0.22) return;
+    const quitter = pick(risky);
+    S.staffState = S.staffState.filter((staff) => staff.id !== quitter.id);
+    applyEffects({ backlog: 8, politicalCapital: -3, morale: -4 });
+    logWeek(`${quitter.name} quit for a role described as “strategic but better staffed.”`, 'bad');
+    toast(`${quitter.name} quit.`, 'bad');
+  }
+
+  function maybeExposure() {
+    if (S.narrativeDebt < 55) return false;
+    const threshold = 0.12 + (S.narrativeDebt - 55) / 120;
+    if (Math.random() > threshold) return false;
+    applyEffects({ politicalCapital: -10, compliance: -6, backlog: 5 });
+    logWeek('An exposure event hits: somebody senior found the difference between the deck and reality.', 'bad');
+    toast('Exposure event: the narrative cracked.', 'bad');
+    return true;
+  }
+
+  function promoteCareer() {
+    if (S.careerTier >= CAREER.length - 1) return;
+    S.careerTier += 1;
+    S.promotionPressure = 0;
+    S.warningCount = Math.max(0, S.warningCount - 1);
+    S.pipStatus = false;
+    applyEffects({ politicalCapital: 8, narrativeDebt: -4, budgetHealth: 3 });
+    logWeek(`Promoted to ${currentCareer().title}. The org is bigger and the excuses are more expensive.`, 'good');
+    toast(`Promoted to ${currentCareer().title}.`, 'good');
+    if (SFX.promote) SFX.promote();
+  }
+
+  function demoteCareer(reason) {
+    if (S.careerTier <= 0) return firePlayer(reason);
+    S.careerTier -= 1;
+    S.demotions += 1;
+    S.promotionPressure = 0;
+    S.warningCount = 1;
+    S.pipStatus = true;
+    applyEffects({ politicalCapital: -14, narrativeDebt: 4, morale: -4 });
+    logWeek(`Demoted to ${currentCareer().title}. ${reason}`, 'bad');
+    toast('Demoted.', 'bad');
+  }
+
+  function firePlayer(reason) {
+    S.isFired = true;
+    S.lastFiredReason = reason;
+    document.getElementById('fired-reason').textContent = reason;
+    document.getElementById('fired-modal').classList.remove('hidden');
+    logWeek(`Fired. ${reason}`, 'bad');
+    saveGame('Fired');
+  }
+
+  function evaluatePromotionAndFailure(exposureTriggered) {
+    const score = computePromotionScore();
+    const target = currentCareer().promotionTarget;
+    if (target < 999 && !S.pipStatus && S.warningCount === 0) {
+      if (score > target) S.promotionPressure = clamp(S.promotionPressure + Math.max(8, score - target + 8), 0, 100);
+      else if (score > target - 8) S.promotionPressure = clamp(S.promotionPressure + 6, 0, 100);
+      else S.promotionPressure = clamp(S.promotionPressure - 4, 0, 100);
+    }
+    const severe = S.backlog > 85 || S.compliance < 24 || S.morale < 24 || S.narrativeDebt > 86 || exposureTriggered;
+    const badWeek = severe || score < 42;
+    if (badWeek) {
+      if (S.pipStatus || severe) {
+        demoteCareer('Leadership has decided that accountability is directional and downward.');
+      } else if (S.warningCount >= 1) {
+        S.pipStatus = true;
+        logWeek('You are now on a Performance Improvement Plan. The plan is mostly vibes and threat.', 'bad');
+        toast('You are now on PIP.', 'bad');
+      } else {
+        S.warningCount += 1;
+        logWeek('Formal warning issued. The slide deck now contains your name in red.', 'bad');
+      }
+    } else if (score > 62) {
+      if (S.warningCount > 0) S.warningCount -= 1;
+      if (S.pipStatus && score > 68) {
+        S.pipStatus = false;
+        logWeek('PIP cleared. You remain employed, which is its own reward.', 'good');
+      }
+      if (S.promotionPressure >= 100) promoteCareer();
+    }
+  }
+
+  function endWeek() {
+    if (unresolvedMandatory()) return void toast('Resolve mandatory inbox decisions before ending the week.', 'bad');
+    const incomingLoad = 8 + S.careerTier * 2 + Math.round(S.staffState.length / 4) + getOpenHeadcount() * 2 + rand(0, 4);
+    const worked = S.weeklyActionsTaken.filter((item) => item.includes('Covered the queue')).length;
+    const resolved = teamDelivery() + worked * 8 + (S.weeklyFlags.midnightOil ? 4 : 0);
+    S.backlog = clamp(S.backlog + incomingLoad - resolved, 0, 100);
+    S.budgetHealth = clamp(S.budgetHealth - 1, 0, 100);
+    S.compliance = clamp(S.compliance - 1, 0, 100);
+    applyStaffDrift();
+    maybeQuitter();
+    const exposureTriggered = maybeExposure();
+    S.lifetimeEarnings += weeklyPay();
+    evaluatePromotionAndFailure(exposureTriggered);
+    if (S.isFired) {
+      saveGame('Fired');
+      renderAll();
+      return;
+    }
+    S.week += 1;
+    rebalanceReports();
+    prepareWeek();
+    saveGame('Autosaved');
+    renderAll();
+  }
+
+  function restartAfterFiring() {
+    const keep = {
+      firings: S.firings + 1,
+      lifetimeEarnings: S.lifetimeEarnings,
+      politicalCapital: 26,
+      narrativeDebt: 6,
+      weekLog: [{ week: 1, text: 'You were fired and rehired somewhere lower in the org chart. Corporate memory is short.', tone: 'bad' }],
+    };
+    S = buildFreshState(keep);
+    prepareWeek(true);
+    document.getElementById('fired-modal').classList.add('hidden');
+    saveGame('Restarted');
+    renderAll();
+  }
+
+  function selectedStaff() {
+    return staffById(S.selectedStaffId);
+  }
+  function renderHeader() {
+    const role = currentCareer();
+    const score = computePromotionScore();
+    const status = S.pipStatus ? 'PIP' : S.warningCount > 0 ? `Warning x${S.warningCount}` : S.careerTier === CAREER.length - 1 ? 'Director' : 'Active';
+    document.getElementById('week-display').textContent = `Week ${S.week}`;
+    document.getElementById('role-title').textContent = role.title;
+    document.getElementById('org-scale').textContent = role.orgScale;
+    document.getElementById('salary-annual').textContent = fmtMoney(role.annualSalary);
+    document.getElementById('salary-lifetime').textContent = fmtMoney(S.lifetimeEarnings);
+    document.getElementById('promotion-pressure').textContent = pct(S.promotionPressure);
+    document.getElementById('promotion-score').textContent = pct(score);
+    document.getElementById('status-pill').textContent = status;
+    document.getElementById('status-pill').className = `status-pill ${S.pipStatus ? 'bad' : S.warningCount ? 'warn' : 'good'}`;
+  }
+
+  function metricCard(label, value, tone, invert = false) {
+    const pctValue = invert ? 100 - value : value;
+    return `<div class="metric-card ${tone}"><div class="metric-top"><span>${label}</span><strong>${pct(value)}</strong></div><div class="metric-bar"><span style="width:${clamp(pctValue, 0, 100)}%"></span></div></div>`;
+  }
+
+  function renderSummary() {
+    document.getElementById('summary-metrics').innerHTML = [
+      metricCard('Desk Load', S.backlog, 'bad', true),
+      metricCard('Morale', S.morale, 'good'),
+      metricCard('Budget', S.budgetHealth, 'warn'),
+      metricCard('Audit Trail', S.compliance, 'info'),
+      metricCard('Bench Strength', benchStrength(), 'purple'),
+      metricCard('Mgmt Debt', S.narrativeDebt, 'bad', true),
+    ].join('');
+    document.getElementById('director-track').innerHTML = CAREER.map((career, index) => {
+      const state = index < S.careerTier ? 'done' : index === S.careerTier ? 'current' : '';
+      return `<div class="track-step ${state}"><span>${career.trackLabel || career.title}</span><small>${career.headcount} seats</small></div>`;
+    }).join('');
+    document.getElementById('week-modifiers').innerHTML = (S.weeklyModifiers.length ? S.weeklyModifiers : ['No active modifiers yet.']).map((item) => `<li>${item}</li>`).join('');
+  }
+
+  function renderInbox() {
+    document.getElementById('inbox-list').innerHTML = S.weeklyInbox.map((event) => `
+      <article class="inbox-card ${event.mandatory ? 'mandatory' : ''} ${event.resolved ? 'resolved' : ''}">
+        <div class="inbox-head">
+          <span class="badge">${event.category === 'timesheet' ? 'TIMESHEET' : event.category.toUpperCase()}</span>
+          ${event.mandatory ? '<span class="badge danger">Mandatory</span>' : '<span class="badge">Optional</span>'}
+        </div>
+        <h3>${event.title}</h3>
+        <p>${event.summary}</p>
+        ${event.resolved ? `<div class="resolved-note">Resolved: ${event.chosenLabel}</div>` : `<div class="choice-list">${event.choices.map((choice) => `<button class="choice-btn" data-event-id="${event.id}" data-choice-id="${choice.id}"><strong>${choice.label}</strong><span>${choice.summary}</span></button>`).join('')}</div>`}
+      </article>`).join('') || '<div class="empty-state">No inbox items. This is suspicious.</div>';
+    const pending = unresolvedMandatory();
+    document.getElementById('mandatory-count').textContent = `${pending} approval${pending === 1 ? '' : 's'} waiting`;
+  }
+
+  function renderActions() {
+    const employee = selectedStaff();
+    const candidate = candidateById(S.selectedCandidateId);
+    document.getElementById('ap-display').textContent = `${S.actionPoints} AP`;
+    document.getElementById('action-target').textContent = employee ? `Focus employee: ${employee.name}` : candidate ? `Focused candidate: ${candidate.name}` : 'Select an employee or candidate for targeted actions.';
+    document.getElementById('staff-detail').innerHTML = employee ? `<div class="detail-head"><div><div class="detail-name">${employee.name}</div><div class="detail-role">${employee.role}</div></div><span class="badge ${employee.isSupervisor ? 'purple' : ''}">${employee.isSupervisor ? 'Supervisor' : 'Employee'}</span></div><div class="detail-grid"><div><span>Competence</span><strong>${employee.competence}</strong></div><div><span>Morale</span><strong>${employee.morale}</strong></div><div><span>Burnout</span><strong>${employee.burnout}</strong></div><div><span>Paperwork</span><strong>${employee.paperwork}</strong></div><div><span>Loyalty</span><strong>${employee.loyalty}</strong></div><div><span>Mgr Rel.</span><strong>${employee.managerRelationship}</strong></div><div><span>Salary</span><strong>${fmtMoney(employee.annualSalary)}</strong></div><div><span>Reports</span><strong>${employee.isSupervisor ? directReports(employee.id).length : 0}</strong></div></div><div class="detail-flags">${employee.flags.map((flag) => `<span class="tag">${flag}</span>`).join('')}</div><p class="detail-note">${employee.notes}</p>` : '<div class="empty-state">Select an employee to inspect them.</div>';
+    document.getElementById('action-grid').innerHTML = WEEKLY_ACTIONS.map((action) => {
+      const blocked = canUseAction(action);
+      return `<button class="action-card" data-action-id="${action.id}" ${blocked ? 'disabled' : ''}><span class="action-icon">${action.icon}</span><span class="action-name">${action.label}</span><span class="action-cost">${action.apCost} AP</span><span class="action-desc">${blocked || action.description}</span></button>`;
+    }).join('');
+    document.getElementById('action-log').innerHTML = (S.weeklyActionsTaken.length ? S.weeklyActionsTaken : ['No manager calls logged yet.']).map((item) => `<li>${item}</li>`).join('');
+  }
+
+  function orgSummary() {
+    return `${S.staffState.length}/${currentCareer().headcount} filled • ${getOpenHeadcount()} open req • ${S.staffState.filter((staff) => staff.isSupervisor).length}/${currentCareer().supervisorSlots || 0} supervisors`;
+  }
+
+  function staffCard(staff, managerLabel = '') {
+    const selected = S.selectedStaffId === staff.id ? 'selected' : '';
+    const manager = managerLabel || (staff.managerId === 'player' ? 'You' : (staffById(staff.managerId)?.name || 'You'));
+    return `<button class="staff-card ${selected}" data-staff-id="${staff.id}"><div class="staff-top"><span class="staff-emoji">${staff.emoji}</span><span class="staff-name">${staff.name}</span>${staff.isSupervisor ? '<span class="badge purple">Supervisor</span>' : ''}</div><div class="staff-role">${staff.role}</div><div class="staff-meta">Mgr: ${manager} • ${staff.flags[0] || 'steady'}</div><div class="staff-stats"><span>Comp ${staff.competence}</span><span>Paper ${staff.paperwork}</span><span>Burn ${staff.burnout}</span></div></button>`;
+  }
+
+  function renderOrg() {
+    document.getElementById('org-summary').textContent = orgSummary();
+    document.getElementById('org-summary-strip').innerHTML = [
+      `<div class="summary-stat"><span>Filled Seats</span><strong>${S.staffState.length}/${currentCareer().headcount}</strong></div>`,
+      `<div class="summary-stat"><span>Open Reqs</span><strong>${getOpenHeadcount()}</strong></div>`,
+      `<div class="summary-stat"><span>Supervisors</span><strong>${S.staffState.filter((staff) => staff.isSupervisor).length}/${currentCareer().supervisorSlots || 0}</strong></div>`,
+      `<div class="summary-stat"><span>Team Payroll</span><strong>${fmtMoney(totalPayroll())}</strong></div>`,
+    ].join('');
+    const pageCount = totalRosterPages();
+    normalizeRosterPage();
+    document.getElementById('roster-page-label').textContent = `Roster ${S.rosterPage + 1} / ${pageCount}`;
+    const prev = document.querySelector('[data-roster-page="prev"]');
+    const next = document.querySelector('[data-roster-page="next"]');
+    if (prev) prev.disabled = S.rosterPage <= 0;
+    if (next) next.disabled = S.rosterPage >= pageCount - 1;
+    document.getElementById('org-chart').innerHTML = visibleRoster().map((staff) => staffCard(staff)).join('') || '<div class="open-slot">No employees yet. Hire someone immediately.</div>';
+    document.getElementById('candidate-slate').innerHTML = S.candidateSlate.length ? S.candidateSlate.map((candidate) => `<button class="candidate-card ${S.selectedCandidateId === candidate.id ? 'selected' : ''}" data-candidate-id="${candidate.id}"><div class="staff-top"><span class="staff-emoji">${candidate.emoji}</span><span class="staff-name">${candidate.name}</span></div><div class="staff-role">${candidate.role}</div><div class="staff-meta">${fmtMoney(candidate.annualSalary)} • ${candidate.flags.join(' / ')}</div></button>`).join('') : '<div class="open-slot">No candidate slate this week.</div>';
+  }
+
+  function renderBoss() {
+    const boss = currentBoss();
+    document.getElementById('boss-name').textContent = boss.name;
+    document.getElementById('boss-title').textContent = boss.title;
+    document.getElementById('boss-mood').textContent = S.bossState.mood;
+    document.getElementById('boss-ask').textContent = S.bossState.ask;
+    document.getElementById('boss-explain').textContent = S.bossState.needsExplanation ? 'You owe leadership an explanation this week.' : 'Leadership is distracted by someone else for the moment.';
+    document.getElementById('political-moves').innerHTML = S.bossState.availableMoves.map((id) => {
+      const move = POLITICAL_MOVES.find((item) => item.id === id);
+      const disabled = S.weeklyFlags.usedPoliticalMove || S.actionPoints < move.apCost;
+      return `<button class="move-card" data-move-id="${move.id}" ${disabled ? 'disabled' : ''}><span class="action-icon">${move.icon}</span><span class="action-name">${move.label}</span><span class="action-cost">${move.apCost} AP</span><span class="action-desc">${S.weeklyFlags.usedPoliticalMove ? 'Political move already spent.' : move.description}</span></button>`;
+    }).join('');
+  }
+
+  function renderResolve() {
+    const pending = unresolvedMandatory();
+    if (pending) document.getElementById('resolve-note').textContent = `${pending} mandatory approval${pending === 1 ? '' : 's'} still unresolved.`;
+    else if (S.careerTier === CAREER.length - 1) document.getElementById('resolve-note').textContent = 'You made Director. Keep the chair as long as you can.';
+    else document.getElementById('resolve-note').textContent = 'Week is ready to resolve. If this goes badly, it will still be your fault.';
+    const button = document.getElementById('btn-end-week');
+    button.disabled = pending > 0;
+    button.textContent = `${S.careerTier === CAREER.length - 1 ? 'Hold' : 'Resolve'} Week ${S.week}`;
+  }
+
+  function renderAll() {
+    renderHeader();
+    renderSummary();
+    renderInbox();
+    renderActions();
+    renderOrg();
+    renderBoss();
+    renderResolve();
+  }
+  function onDelegatedClick(event) {
+    const action = event.target.closest('[data-action-id]');
+    if (action) return performAction(action.dataset.actionId);
+    const move = event.target.closest('[data-move-id]');
+    if (move) return performPoliticalMove(move.dataset.moveId);
+    const choice = event.target.closest('[data-event-id]');
+    if (choice) return resolveInboxChoice(choice.dataset.eventId, choice.dataset.choiceId);
+    const pager = event.target.closest('[data-roster-page]');
+    if (pager) {
+      S.rosterPage += pager.dataset.rosterPage === 'next' ? 1 : -1;
+      normalizeRosterPage();
+      return void renderOrg();
+    }
+    const staff = event.target.closest('[data-staff-id]');
+    if (staff) {
+      S.selectedStaffId = staff.dataset.staffId;
+      syncRosterPageToSelection();
+      return void renderAll();
+    }
+    const candidate = event.target.closest('[data-candidate-id]');
+    if (candidate) {
+      S.selectedCandidateId = candidate.dataset.candidateId;
+      renderAll();
+    }
+  }
+
+  function bindEvents() {
+    document.body.addEventListener('click', onDelegatedClick);
+    document.getElementById('btn-end-week').addEventListener('click', endWeek);
+    document.getElementById('btn-save').addEventListener('click', () => saveGame('Saved'));
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      if (!window.confirm('Reset the strategy sim and start over as Service Desk Supervisor?')) return;
+      localStorage.removeItem(SAVE_KEY);
+      S = buildFreshState();
+      prepareWeek(true);
+      saveGame('Reset');
+      renderAll();
+    });
+    document.getElementById('btn-help').addEventListener('click', () => document.getElementById('help-modal').classList.remove('hidden'));
+    document.getElementById('close-help').addEventListener('click', () => document.getElementById('help-modal').classList.add('hidden'));
+    document.getElementById('btn-restart-fired').addEventListener('click', restartAfterFiring);
+    document.getElementById('btn-sound').addEventListener('click', () => {
+      const enabled = SFX.toggle ? SFX.toggle() : true;
+      document.getElementById('btn-sound').textContent = enabled ? '🔊' : '🔇';
+    });
+    window.addEventListener('beforeunload', () => saveGame('Saved'));
+  }
+
+  function init() {
+    const loaded = loadGame();
+    S = loaded || buildFreshState();
+    if (loaded) {
+      S.weeklyModifiers = Array.isArray(S.weeklyModifiers) ? S.weeklyModifiers : [];
+      S.weeklyActionsTaken = Array.isArray(S.weeklyActionsTaken) ? S.weeklyActionsTaken : [];
+      S.pendingConsequences = Array.isArray(S.pendingConsequences) ? S.pendingConsequences : [];
+      S.weeklyInbox = Array.isArray(S.weeklyInbox) ? S.weeklyInbox : [];
+      S.candidateSlate = Array.isArray(S.candidateSlate) ? S.candidateSlate : [];
+      S.staffState = Array.isArray(S.staffState) ? S.staffState : [];
+      S.staffState.forEach((staff) => {
+        if (typeof staff.paperwork !== 'number') staff.paperwork = clamp(rand(42, 78), 0, 100);
+      });
+      S.weeklyFlags = S.weeklyFlags || { usedPoliticalMove: false, freezeHiring: false, reviewRequested: false, midnightOil: false };
+      S.bossState = S.bossState || buildBossState();
+      S.rosterPage = typeof S.rosterPage === 'number' ? S.rosterPage : 0;
+      rebalanceReports();
+      recomputeMorale();
+      syncRosterPageToSelection();
+      if (S.isFired) {
+        document.getElementById('fired-reason').textContent = S.lastFiredReason || 'Leadership has decided your story no longer aligns with the org.';
+        document.getElementById('fired-modal').classList.remove('hidden');
+      }
+    } else {
+      prepareWeek(true);
+    }
+    bindEvents();
+    renderAll();
+    saveGame('Saved');
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
+  else init();
+})();
