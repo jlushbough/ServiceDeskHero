@@ -1,0 +1,9 @@
+cloud/feedback-lambda/node_modules/
+cloud/feedback-lambda/package-lock.json
+cloud/feedback-lambda/*.zip
+cloud/feedback-lambda/*-env.json
+cloud/feedback-lambda/cors.json
+cloud/feedback-lambda/*policy*.json
+node_modules/
+playwright-report/
+test-results/

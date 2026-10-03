@@ -1,0 +1,14 @@
+{
+  "name": "servicedeskhero",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check": "node --check js/rush-dialogue.js && node --check js/rush-projects.js && node --check js/rush-engine.js && node --check js/rush-ui.js && node --check js/rush-tickets.js && node --check js/main.js && node --check js/rush-bosses.js && node --check tests/browser.spec.js && node --check tests/workspace.spec.js && node --check js/rush-dungeon.js && node --check js/rush-life.js && node --check tests/dungeon.spec.js",
+    "serve": "python3 -m http.server 4176",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.57.0"
+  }
+}

@@ -6,6 +6,7 @@
 // ── Wait for constants.js to populate window.GAME_DATA ──
 const { CAREER, UPGRADES, HEROES, SKILLS, OFFICE_UPGRADES, INCIDENTS, ACHIEVEMENTS, DIFFICULTY_MODES } = window.GAME_DATA;
 const SFX = window.SFX;
+const FEEDBACK_ALLOWED = ['servicedeskhero.com', 'www.servicedeskhero.com'].includes(window.location.hostname);
 const FEEDBACK_ENDPOINT = 'https://xthqp43m7fbaunjuvalsg5qgdm0ooggz.lambda-url.us-east-1.on.aws/';
 
 // ══════════════════════════════════════════════════════════════
@@ -55,10 +56,12 @@ function buildDefaultState() {
     tutorialFirstUpgradeDone: false,
     tutorialFirstIncidentSeen: false,
     tutorialFirstIncidentResolved: false,
+    tutorialRewardsClaimed: [],
     // Shift state
     clockedOut: false,
     clockedOutAt: null,
     restedBuffUntil: 0,
+    shiftGraceUntil: 0,
     // Heroes currently available for hire
     applicantPool: [],
     // Metadata for active recruit candidates (bad hire flags/hints)
@@ -68,6 +71,7 @@ function buildDefaultState() {
     // Stats for achievement checks
     incidentsResolved: 0,
     dispatches: 0,
+    incidentLog: [],
     upgradesPurchased: 0,
     heroesOwned: 0,
     // Skill-driven modifiers
@@ -170,6 +174,118 @@ function rollOfficeDraftChoices() {
 
 function getIncidentRewardMultiplier() {
   return 1 + (S.officeMods?.incidentRewardMult || 0);
+}
+
+function getRemainingOfficePerks() {
+  return OFFICE_UPGRADES.filter(perk => !(S.officePerksChosen || []).includes(perk.id));
+}
+
+function getCareerIntelModel() {
+  const tier = CAREER[S.careerTier];
+  const nextTier = CAREER[S.careerTier + 1] || null;
+  const remainingOfficePerks = getRemainingOfficePerks();
+
+  if (!nextTier) {
+    return {
+      tier,
+      nextTier: null,
+      pct: 100,
+      remaining: 0,
+      remainingOfficePerks,
+      previewPerks: [],
+    };
+  }
+
+  const req = getCareerRequirement(nextTier);
+  const remaining = Math.max(0, req - S.lifetimeTickets);
+  const pct = req > 0 ? Math.min((S.lifetimeTickets / req) * 100, 100) : 0;
+  const previewPool = remainingOfficePerks
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, 3);
+
+  return {
+    tier,
+    nextTier,
+    req,
+    remaining,
+    pct,
+    remainingOfficePerks,
+    previewPerks: previewPool,
+  };
+}
+
+function getCareerIntelMarkup() {
+  const intel = getCareerIntelModel();
+  if (!intel.nextTier) {
+    return {
+      status: 'Top of pyramid',
+      summary: 'You made CIO. Congratulations, you now own the meetings and the blame.',
+      chips: ['<span class="career-intel-chip highlight">👑 Max rank reached</span>'],
+      resetNote: 'Promotion loop complete. Now optimize the machine, chase achievements, or torment incidents for sport.',
+    };
+  }
+
+  const promotionBonus = Math.max(0, ((intel.nextTier.prestigeBonus - 1) * 100));
+  const officeText = intel.remainingOfficePerks.length
+    ? `${intel.remainingOfficePerks.length} office upgrade${intel.remainingOfficePerks.length === 1 ? '' : 's'} still in the interlude pool.`
+    : 'All office upgrades already secured.';
+
+  return {
+    status: intel.remaining === 0 ? 'Promotion armed' : `${Math.round(intel.pct)}% to ${intel.nextTier.title}`,
+    summary: intel.remaining === 0
+      ? `${intel.nextTier.icon} ${intel.nextTier.title} is ready. Promote for a permanent ×${intel.nextTier.prestigeBonus.toFixed(2)} multiplier, then pick an office upgrade before the next disaster cycle.`
+      : `${fmt(intel.remaining)} tickets until ${intel.nextTier.icon} ${intel.nextTier.title}. Promotion adds roughly +${promotionBonus.toFixed(0)}% permanent power on this run's reset.${intel.remaining <= Math.max(1500, intel.req * 0.12) ? ' You are in striking distance, so stop buying decorative nonsense unless it pays back fast.' : ''}`,
+    chips: [
+      `<span class="career-intel-chip highlight">🏆 Next bonus ×${intel.nextTier.prestigeBonus.toFixed(2)}</span>`,
+      `<span class="career-intel-chip">👥 Squad persists</span>`,
+      `<span class="career-intel-chip">🧠 Skills persist</span>`,
+      `<span class="career-intel-chip">🪑 ${officeText}</span>`,
+      ...intel.previewPerks.map(perk => `<span class="career-intel-chip">${perk.icon} ${perk.name}</span>`),
+    ],
+    resetNote: 'Promotion resets current tickets, upgrades, level, and strikes. It keeps your squad, achievements, office perks, and the permanent prestige multiplier. In other words: shed the clutter, keep the empire.',
+  };
+}
+
+function logIncidentEvent(incident, outcome, extra = {}) {
+  if (!incident) return;
+  const entry = {
+    id: `${incident.id || 'incident'}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    incidentId: incident.id || 'unknown',
+    title: incident.title || 'Incident',
+    icon: incident.icon || '🚨',
+    category: incident.category || 'clerical',
+    severity: getIncidentSeverity(incident).label,
+    outcome,
+    reward: extra.reward || 0,
+    responder: extra.responder || null,
+    responderType: extra.responderType || null,
+    matchLabel: extra.matchLabel || null,
+    note: extra.note || '',
+    gameDay: S.gameDay || 1,
+    at: Date.now(),
+  };
+
+  S.incidentLog = [entry, ...(Array.isArray(S.incidentLog) ? S.incidentLog : [])].slice(0, 8);
+}
+
+function getIncidentOutcomeTone(entry) {
+  switch (entry.outcome) {
+    case 'resolved_dispatch':
+      return { label: 'Dispatched', cls: 'success' };
+    case 'resolved_self':
+      return { label: 'Handled Myself', cls: 'success' };
+    case 'partial_self':
+      return { label: 'Partial Save', cls: 'warning' };
+    case 'failed_self':
+      return { label: 'Failed', cls: 'danger' };
+    case 'missed':
+      return { label: 'Missed', cls: 'danger' };
+    case 'deferred':
+      return { label: 'Deferred', cls: 'neutral' };
+    default:
+      return { label: 'Logged', cls: 'neutral' };
+  }
 }
 
 function dampenBonus(sum) {
@@ -330,6 +446,65 @@ function getCheapestUpgradeTarget() {
   return candidates.sort((a, b) => a.cost - b.cost)[0];
 }
 
+const ONBOARDING_REWARDS = {
+  firstClick: {
+    label: '+25 tickets',
+    tickets: 25,
+    xp: 0,
+    toast: '⚡ First ticket bonus: +25 tickets. Bribery? No. Momentum.'
+  },
+  firstRecruit: {
+    label: '+60 tickets',
+    tickets: 60,
+    xp: 0,
+    toast: '👥 Delegation bonus: +60 tickets. Management loves headcount.'
+  },
+  firstUpgrade: {
+    label: '+75 tickets',
+    tickets: 75,
+    xp: 0,
+    toast: '🛠️ Process bonus: +75 tickets. Look at you, automating your way out of labor.'
+  },
+  firstIncidentResolved: {
+    label: '+150 tickets +25 XP',
+    tickets: 150,
+    xp: 25,
+    toast: '🚨 Firefight bonus: +150 tickets and +25 XP. Competence remains suspicious but profitable.'
+  },
+  firstShiftComplete: {
+    label: '+250 tickets +60 XP',
+    tickets: 250,
+    xp: 60,
+    toast: '🏁 First shift complete: +250 tickets and +60 XP. Fine. You survived probation.'
+  },
+};
+
+function hasClaimedOnboardingReward(id) {
+  return (S.tutorialRewardsClaimed || []).includes(id);
+}
+
+function claimOnboardingReward(id) {
+  const reward = ONBOARDING_REWARDS[id];
+  if (!reward || hasClaimedOnboardingReward(id)) return false;
+
+  S.tutorialRewardsClaimed = [...(S.tutorialRewardsClaimed || []), id];
+  if (reward.tickets) gainTickets(reward.tickets);
+  if (reward.xp) gainXp(reward.xp);
+  toast(reward.toast, 'gold');
+  return true;
+}
+
+function tryCompleteFirstShiftBonus() {
+  if (
+    S.tutorialFirstClickDone &&
+    S.tutorialFirstRecruitDone &&
+    S.tutorialFirstUpgradeDone &&
+    S.tutorialFirstIncidentResolved
+  ) {
+    claimOnboardingReward('firstShiftComplete');
+  }
+}
+
 function renderOnboarding() {
   const panel = document.getElementById('onboarding-panel');
   if (!panel) return;
@@ -337,35 +512,57 @@ function renderOnboarding() {
   const recruitTarget = getCheapestRecruitTarget();
   const upgradeTarget = getCheapestUpgradeTarget();
   const steps = [
-    { done: S.tutorialFirstClickDone, text: 'Resolve your first ticket and start the queue moving.' },
     {
+      id: 'firstClick',
+      done: S.tutorialFirstClickDone,
+      text: 'Resolve your first ticket and start the queue moving.'
+    },
+    {
+      id: 'firstRecruit',
       done: S.tutorialFirstRecruitDone,
       text: recruitTarget
         ? `Recruit your first hero (${recruitTarget.hero.name} is ${fmt(recruitTarget.cost)} tickets right now).`
         : 'Recruit your first hero so tickets keep moving without your fingers.',
     },
     {
+      id: 'firstUpgrade',
       done: S.tutorialFirstUpgradeDone,
       text: upgradeTarget
         ? `Buy your first upgrade (${upgradeTarget.upgrade.name} starts at ${fmt(upgradeTarget.cost)} tickets).`
         : 'Buy your first upgrade and begin automating your way into management.',
     },
-    { done: S.tutorialFirstIncidentResolved, text: 'Survive your first incident without collecting a strike.' },
+    {
+      id: 'firstIncidentResolved',
+      done: S.tutorialFirstIncidentResolved,
+      text: 'Survive your first incident without collecting a strike.'
+    },
   ];
 
   const allDone = steps.every(step => step.done);
   if (S.tutorialDismissed || allDone) {
-    panel.classList.add('hidden');
-    return;
+    if (allDone && !hasClaimedOnboardingReward('firstShiftComplete')) {
+      panel.classList.remove('hidden');
+    } else {
+      panel.classList.add('hidden');
+      return;
+    }
+  } else {
+    panel.classList.remove('hidden');
   }
-  panel.classList.remove('hidden');
 
-  document.getElementById('onboarding-checklist').innerHTML = steps.map(step => `
-    <div class="onboarding-item ${step.done ? 'done' : ''}">
-      <span class="onboarding-mark">${step.done ? '✓' : '•'}</span>
-      <span>${step.text}</span>
-    </div>
-  `).join('');
+  document.getElementById('onboarding-checklist').innerHTML = steps.map(step => {
+    const reward = ONBOARDING_REWARDS[step.id];
+    const claimed = hasClaimedOnboardingReward(step.id);
+    return `
+      <div class="onboarding-item ${step.done ? 'done' : ''}">
+        <span class="onboarding-mark">${step.done ? '✓' : '•'}</span>
+        <div class="onboarding-copy">
+          <span>${step.text}</span>
+          ${reward ? `<span class="onboarding-reward ${claimed ? 'claimed' : ''}">${claimed ? 'Claimed' : reward.label}</span>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
 
   let tip = 'Clear a few tickets to get the queue moving.';
   let actionLabel = 'Resolve Some Tickets';
@@ -375,7 +572,11 @@ function renderOnboarding() {
   const upgradeNeeded = upgradeTarget ? Math.max(0, upgradeTarget.cost - S.tickets) : Infinity;
   const shouldPrioritizeUpgrade = !S.tutorialFirstUpgradeDone && !S.tutorialFirstRecruitDone && upgradeNeeded < recruitNeeded;
 
-  if (!S.tutorialFirstClickDone) {
+  if (allDone && !hasClaimedOnboardingReward('firstShiftComplete')) {
+    tip = 'All first-shift objectives complete. Cash the completion bonus and enjoy your temporary delusion of competence.';
+    actionLabel = 'Claim First Shift Bonus';
+    action = 'claim-first-shift';
+  } else if (!S.tutorialFirstClickDone) {
     tip = 'Mash Resolve Ticket a few times. Momentum first, dignity later.';
     actionLabel = 'Resolve Some Tickets';
     action = 'click';
@@ -507,6 +708,7 @@ function handleClick(evt) {
   if (!S.tutorialFirstClickDone) {
     S.tutorialFirstClickDone = true;
     toast('🧾 Queue open. Good. Now turn panic into throughput.', 'gold');
+    claimOnboardingReward('firstClick');
     renderOnboarding();
   }
 
@@ -780,6 +982,8 @@ function buyUpgrade(id) {
   if (!S.tutorialFirstUpgradeDone) {
     S.tutorialFirstUpgradeDone = true;
     toast('⚙️ First upgrade online. Congratulations, you have invented process.', 'gold');
+    claimOnboardingReward('firstUpgrade');
+    tryCompleteFirstShiftBonus();
     renderOnboarding();
   }
   renderUpgrades();
@@ -824,6 +1028,8 @@ function recruitHero(id) {
   if (!S.tutorialFirstRecruitDone) {
     S.tutorialFirstRecruitDone = true;
     toast('👥 First hire secured. Delegation: the first step toward management and plausible deniability.', 'gold');
+    claimOnboardingReward('firstRecruit');
+    tryCompleteFirstShiftBonus();
     renderOnboarding();
   }
   renderSquad();
@@ -1056,16 +1262,20 @@ function checkPromotionReady() {
   }
   const req = getCareerRequirement(nextTier);
   const progress = req > 0 ? (S.lifetimeTickets / req) : 0;
+  const remainingOfficePerks = getRemainingOfficePerks();
+  const officeHint = remainingOfficePerks.length
+    ? ` Office interlude still has ${remainingOfficePerks.length} permanent upgrade${remainingOfficePerks.length === 1 ? '' : 's'} left.`
+    : ' Office interlude pool is exhausted, so this one is pure prestige.';
   if (S.lifetimeTickets >= req) {
     panel.classList.remove('hidden');
     titleEl.textContent = '🚀 Promotion Ready!';
-    descEl.textContent = `You survived long enough to be rewarded with more responsibility. Promote to ${nextTier.icon} ${nextTier.title} and gain ×${nextTier.prestigeBonus} permanent bonus. Tickets reset. Squad and upgrades stay.`;
+    descEl.textContent = `You survived long enough to be rewarded with more responsibility. Promote to ${nextTier.icon} ${nextTier.title} for a permanent ×${nextTier.prestigeBonus.toFixed(2)} bonus. Reset: current tickets, upgrades, level, strikes. Keep: squad, skills, achievements, office perks.${officeHint}`;
     btnEl.textContent = `Accept Promotion to ${nextTier.title}`;
     btnEl.disabled = false;
   } else if (progress >= 0.72) {
     panel.classList.remove('hidden');
     titleEl.textContent = '👀 Promotion Track';
-    descEl.textContent = `${fmt(req - S.lifetimeTickets)} tickets until ${nextTier.icon} ${nextTier.title}. Leadership can smell a promotion deck forming.`;
+    descEl.textContent = `${fmt(req - S.lifetimeTickets)} tickets until ${nextTier.icon} ${nextTier.title}. Permanent bonus waiting: ×${nextTier.prestigeBonus.toFixed(2)}.${officeHint}`;
     btnEl.textContent = 'Not Quite There Yet';
     btnEl.disabled = true;
   } else {
@@ -1239,9 +1449,50 @@ function getIncidentCommentary(inc) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+function getIncidentBestResponder(incident) {
+  const ownedHeroes = HEROES.filter(h => S.heroState[h.id]?.owned);
+  if (!ownedHeroes.length) return null;
+
+  return ownedHeroes
+    .map(hero => getDispatchCardData(hero, incident))
+    .sort((a, b) => b.score - a.score)[0] || null;
+}
+
+function renderIncidentBannerDetails(incident, previewReward, sev) {
+  const severityEl = document.getElementById('incident-severity');
+  const timerEl = document.getElementById('incident-timer');
+  const skillsEl = document.getElementById('incident-skill-chips');
+  const bestEl = document.getElementById('incident-best-response');
+  const bestResponder = getIncidentBestResponder(incident);
+  const skillChips = (incident.requiredSkills || []).length
+    ? [
+        '<span class="incident-skill-chip label">Needed</span>',
+        ...(incident.requiredSkills || []).map(skill => `<span class="incident-skill-chip">${skill}</span>`)
+      ]
+    : ['<span class="incident-skill-chip">Any competent gremlin can take this one.</span>'];
+
+  severityEl.classList.remove('sev-1', 'sev-2', 'sev-3');
+  severityEl.classList.add(sev.label.toLowerCase());
+  timerEl.classList.toggle('urgent', (incident.timeLeft || 0) <= 10);
+  skillsEl.innerHTML = skillChips.join('');
+
+  if (!bestResponder) {
+    bestEl.textContent = `Best response: solo panic mode. No squad yet. Reward preview still sits around ~${fmt(previewReward)} tickets if you can brute-force it.`;
+    return;
+  }
+
+  if (!bestResponder.isActive) {
+    bestEl.textContent = `Best response: ${bestResponder.hero.emoji} ${bestResponder.hero.name}, but they are ${bestResponder.hs.status.toLowerCase()}. You may need to handle this yourself.`;
+    return;
+  }
+
+  bestEl.textContent = `Best available responder: ${bestResponder.hero.emoji} ${bestResponder.hero.name} • ${bestResponder.match.label.replace(/^[^ ]+\s*/, '')} • ~${fmt(bestResponder.projectedReward)} tickets.`;
+}
+
 function triggerIncident() {
   if (activeIncident) return;
-  if (S.clockedOut && Math.random() < 0.75) return; // Most incidents defer while off shift
+  if (S.clockedOut) return;
+  if (Date.now() < (S.shiftGraceUntil || 0)) return;
   const inc = INCIDENTS[Math.floor(Math.random() * INCIDENTS.length)];
   activeIncident = { ...inc, timeLeft: inc.timeLimit };
   const banner = document.getElementById('incident-banner');
@@ -1254,6 +1505,7 @@ function triggerIncident() {
   document.getElementById('incident-text').textContent  = `${inc.text} ${commentary}`;
   document.getElementById('incident-meta').textContent = `${sev.risk} Reward preview: ~${fmt(previewReward)} tickets.`;
   document.getElementById('incident-timer').textContent = `${inc.timeLimit}s`;
+  renderIncidentBannerDetails(activeIncident, previewReward, sev);
   banner.classList.remove('hidden');
   SFX.incident();
   if (!S.tutorialFirstIncidentSeen) {
@@ -1265,6 +1517,7 @@ function triggerIncident() {
     if (!activeIncident) { clearInterval(incidentCountdown); return; }
     activeIncident.timeLeft--;
     document.getElementById('incident-timer').textContent = `${activeIncident.timeLeft}s`;
+    document.getElementById('incident-timer').classList.toggle('urgent', activeIncident.timeLeft <= 10);
     const cn = document.getElementById('dispatch-countdown-num');
     if (cn) cn.textContent = activeIncident.timeLeft;
     if (activeIncident.timeLeft <= 0) dismissIncident(false);
@@ -1275,11 +1528,18 @@ function dismissIncident(resolved, silently = false) {
   clearInterval(incidentCountdown);
   document.getElementById('incident-banner').classList.add('hidden');
   closeDispatchModal();
-  if (!resolved && !silently) {
+  if (!resolved && !silently && activeIncident) {
+    logIncidentEvent(activeIncident, 'missed', {
+      note: 'Timer expired before the team responded.',
+    });
     toast('⚠️ Incident abandoned! That is a strike!', 'red');
     addStrike();
-  } else if (!resolved) {
-    // Silent dismiss
+    renderStatsTab();
+  } else if (!resolved && silently && activeIncident) {
+    logIncidentEvent(activeIncident, 'deferred', {
+      note: 'Deferred while clocking out or changing flow.',
+    });
+    renderStatsTab();
   }
   activeIncident = null;
 
@@ -1452,12 +1712,22 @@ function dispatchHeroToIncident(heroId) {
     gainTickets(reward);
     gainXp(calcXpGain(reward));
     S.incidentsResolved++;
+    logIncidentEvent(inc, 'resolved_dispatch', {
+      reward,
+      responder: hero.name,
+      responderType: 'hero',
+      matchLabel: match.label,
+      note: `${hero.name} handled the escalation with ${match.label.replace(/^[^ ]+\s*/, '').toLowerCase()}.`,
+    });
     if (!S.tutorialFirstIncidentResolved) {
       S.tutorialFirstIncidentResolved = true;
       toast('🛡️ Incident contained. Excellent. Pretend this level of competence is sustainable.', 'gold');
+      claimOnboardingReward('firstIncidentResolved');
+      tryCompleteFirstShiftBonus();
       renderOnboarding();
     }
     toast(`✅ ${hero.name}: ${match.label} — +${fmt(reward)} tickets!`, 'green');
+    renderStatsTab();
     checkAchievements();
   }, resolveTime);
 }
@@ -1550,17 +1820,23 @@ function endMinigame(success) {
   const titleEl = document.getElementById('minigame-result-title');
   const emojiEl = document.getElementById('minigame-result-emoji');
 
+  let outcome = 'failed_self';
+  let note = `Only ${Math.round(mgState.progress * 100)}% resolved before the situation cratered.`;
   if (success || mgState.progress >= 1) {
     emojiEl.textContent = '🎉'; titleEl.textContent = 'INCIDENT RESOLVED!';
     titleEl.className = 'minigame-result-title success';
     document.getElementById('minigame-result-reward').textContent = `+${fmt(reward)} tickets earned!`;
     SFX.minigameWin();
+    outcome = 'resolved_self';
+    note = `Chuck personally dragged this mess over the finish line for +${fmt(reward)} tickets.`;
   } else if (mgState.progress >= 0.5) {
     emojiEl.textContent = '😅'; titleEl.textContent = 'Partially Resolved';
     titleEl.className = 'minigame-result-title success';
     document.getElementById('minigame-result-reward').textContent =
       `Salvaged +${fmt(reward)} tickets (${Math.round(mgState.progress*100)}% complete)`;
     SFX.minigameWin();
+    outcome = 'partial_self';
+    note = `Chuck stabilized ${Math.round(mgState.progress * 100)}% of the blast radius and salvaged +${fmt(reward)} tickets.`;
   } else {
     emojiEl.textContent = '💀'; titleEl.textContent = 'INCIDENT FAILED!';
     titleEl.className = 'minigame-result-title failed';
@@ -1572,8 +1848,22 @@ function endMinigame(success) {
 
   if (reward > 0) { gainTickets(reward); gainXp(calcXpGain(reward)); }
   S.incidentsResolved++;
+  if ((success || mgState.progress >= 0.5) && !S.tutorialFirstIncidentResolved) {
+    S.tutorialFirstIncidentResolved = true;
+    toast('🛡️ Incident contained. Excellent. Pretend this level of competence is sustainable.', 'gold');
+    claimOnboardingReward('firstIncidentResolved');
+    tryCompleteFirstShiftBonus();
+    renderOnboarding();
+  }
+  logIncidentEvent(mgState.inc, outcome, {
+    reward,
+    responder: 'Chuck Sterling',
+    responderType: 'self',
+    note,
+  });
   activeIncident = null;
   mgState = null;
+  renderStatsTab();
   checkAchievements();
 }
 
@@ -1608,6 +1898,43 @@ function calcOfflineIncome() {
 // ══════════════════════════════════════════════════════════════
 // RENDER
 // ══════════════════════════════════════════════════════════════
+function renderCareerIntel() {
+  const panel = document.getElementById('career-intel-panel');
+  if (!panel) return;
+  const intel = getCareerIntelModel();
+  const markup = getCareerIntelMarkup();
+  const statusEl = document.getElementById('career-intel-status');
+  const summaryEl = document.getElementById('career-intel-summary');
+  const perksEl = document.getElementById('career-intel-perks');
+  const noteEl = document.getElementById('career-intel-reset-note');
+  const progressEl = document.getElementById('career-intel-progress-bar');
+
+  if (statusEl) statusEl.textContent = markup.status;
+  if (summaryEl) summaryEl.textContent = markup.summary;
+  if (perksEl) perksEl.innerHTML = markup.chips.join('');
+  if (noteEl) noteEl.textContent = markup.resetNote;
+  if (progressEl) progressEl.style.width = `${intel.pct || 0}%`;
+}
+
+function getShiftStatusText() {
+  const now = Date.now();
+  const restedMs = Math.max(0, (S.restedBuffUntil || 0) - now);
+  const graceMs = Math.max(0, (S.shiftGraceUntil || 0) - now);
+
+  if (S.clockedOut) {
+    return 'Off Shift • incidents paused • squad running at 60%';
+  }
+
+  const parts = ['On Shift'];
+  if (restedMs > 0) {
+    parts.push(`rested bonus ${Math.ceil(restedMs / 1000)}s`);
+  }
+  if (graceMs > 0) {
+    parts.push(`incident grace ${Math.ceil(graceMs / 1000)}s`);
+  }
+  return parts.join(' • ');
+}
+
 function renderStats() {
   const ps = calcPerSec();
   const pc = calcPerClick();
@@ -1621,7 +1948,7 @@ function renderStats() {
   if (shiftBtn && shiftStatus && clickBtn) {
     shiftBtn.textContent = S.clockedOut ? '🟢 Clock In' : '🕒 Clock Out';
     shiftBtn.classList.toggle('clocked-out', S.clockedOut);
-    shiftStatus.textContent = S.clockedOut ? 'Off Shift • squad running at 60%' : (rested ? 'On Shift • rested bonus active' : 'On Shift');
+    shiftStatus.textContent = getShiftStatusText();
     shiftStatus.classList.toggle('rested', rested && !S.clockedOut);
     clickBtn.disabled = S.clockedOut;
     clickBtn.classList.toggle('is-disabled', S.clockedOut);
@@ -1660,12 +1987,14 @@ function renderStats() {
   const tier = CAREER[S.careerTier];
   const nextTier = CAREER[S.careerTier + 1];
   if (nextTier) {
-    const pct = Math.min(S.lifetimeTickets / nextTier.xpRequired * 100, 100);
+    const req = getCareerRequirement(nextTier);
+    const pct = req > 0 ? Math.min(S.lifetimeTickets / req * 100, 100) : 0;
     document.getElementById('career-progress-bar').style.width = pct + '%';
   } else {
     document.getElementById('career-progress-bar').style.width = '100%';
   }
   document.getElementById('career-title').textContent = `${tier.icon} ${tier.title}`;
+  renderCareerIntel();
 }
 
 function renderXpBar() {
@@ -1747,19 +2076,22 @@ function buildHeroCard(h, hs, owned) {
   const rarityColors = { common:'#9ea5d1', uncommon:'#4ade80', rare:'#3b82f6', epic:'#a78bfa', legendary:'#ffc94b' };
   const rarityColor  = rarityColors[h.rarity] || '#fff';
 
-  // Skill badges on owned hero cards
   if (owned) {
     const lvl = hs.level;
     const lvlUpCost = getHeroLevelCost(h, lvl);
     const trainCost = 2500 * ((h.skills || []).length + 1);
     const cpsContrib = fmtDecimal(h.baseCps * (1 + (lvl - 1) * 0.25));
     const skillBadges = (h.skills || []).map(s => `<span class="skill-badge">${s}</span>`).join('');
-    
+
     if (hs.morale === undefined) hs.morale = 100;
     const moraleColor = hs.morale > 70 ? 'var(--green)' : hs.morale > 30 ? 'var(--gold)' : 'var(--red)';
     const statusClass = hs.status === 'Active' ? 'status-active' : 'status-out';
     const hintLevel = hs.badHire ? (hs.badHireHintLevel || 0) : 0;
-    const badHireHint = hs.badHire ? `<div class="bad-hire-hint hint-${hintLevel}">${hintLevel === 0 ? '😬 Slightly off vibes.' : hintLevel === 1 ? '🤨 Talks in buzzwords. Output not found.' : hintLevel === 2 ? '🚩 Team morale dropping around this one.' : '☠️ Confirmed bad hire. Act accordingly.'}</div>` : '';
+    const badHireHint = hs.badHire
+      ? `<div class="bad-hire-hint hint-${hintLevel}">${hintLevel === 0 ? '[Watchlist] Slightly off vibes.' : hintLevel === 1 ? '[Warning] Talks in buzzwords. Output not found.' : hintLevel === 2 ? '[Problem] Team morale dropping around this one.' : '[Confirmed] Bad hire. Act accordingly.'}</div>`
+      : '';
+    const fireButton = hs.badHire ? '<button class="btn-hero btn-fire">Review for Exit</button>' : '';
+    const actionCols = hs.badHire ? 'grid-template-columns: repeat(3, minmax(0, 1fr));' : 'grid-template-columns: 1fr 1fr;';
 
     card.innerHTML = `
       <div class="hero-card-top">
@@ -1781,16 +2113,27 @@ function buildHeroCard(h, hs, owned) {
         <div class="hero-morale-bar-bg"><div class="hero-morale-bar" style="width:${hs.morale}%; background:${moraleColor}"></div></div>
       </div>
       <div class="hero-lvl-bar-wrap"><div class="hero-lvl-bar" style="width:${Math.min((lvl/20)*100,100)}%"></div></div>
-      <div class="hero-card-actions" style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-        <button class="btn-hero btn-levelup" ${S.tickets >= lvlUpCost ? '' : 'disabled'}>Lvl Up (${fmt(lvlUpCost)}🎫)</button>
-        <button class="btn-hero btn-train" ${S.tickets >= trainCost && hs.status === 'Active' ? '' : 'disabled'}>Train (${fmt(trainCost)}🎫)</button>
+      <div class="hero-card-actions" style="display:grid; ${actionCols} gap:6px;">
+        <button class="btn-hero btn-levelup" ${S.tickets >= lvlUpCost ? '' : 'disabled'}>Lvl Up (${fmt(lvlUpCost)} tickets)</button>
+        <button class="btn-hero btn-train" ${S.tickets >= trainCost && hs.status === 'Active' ? '' : 'disabled'}>Train (${fmt(trainCost)} tickets)</button>
+        ${fireButton}
       </div>
     `;
     card.querySelector('.btn-levelup').addEventListener('click', () => levelUpHero(h.id));
     card.querySelector('.btn-train').addEventListener('click', () => startTraining(h.id));
+    if (hs.badHire) {
+      card.querySelector('.btn-fire')?.addEventListener('click', () => fireHero(h.id));
+    }
   } else {
     const skillBadges = (h.skills || []).map(s => `<span class="skill-badge">${s}</span>`).join('');
     const recruitCost = getHeroRecruitCost(h);
+    const candidateMeta = S.recruitCandidateMeta?.[h.id] || {};
+    const clueLevel = getHeroPenaltyHintLevel(candidateMeta);
+    const clueText = candidateMeta.badHireClue || 'Proceed only if you enjoy consequences.';
+    const candidateWarning = candidateMeta.badHire
+      ? `<div class="bad-hire-hint hint-${clueLevel}">${clueLevel === 0 ? '[Vibe check] Background check pending. Something feels off.' : clueLevel === 1 ? `[Recruiter note] ${clueText}` : clueLevel === 2 ? `[Interview panel] ${clueText}` : `[Known risk] Everyone can smell the mistake now. ${clueText}`}</div>`
+      : '';
+
     card.innerHTML = `
       <div class="hero-card-top">
         <span class="hero-emoji">${h.emoji}</span>
@@ -1801,13 +2144,14 @@ function buildHeroCard(h, hs, owned) {
         </div>
       </div>
       <div class="hero-skills-row">${skillBadges}</div>
+      ${candidateWarning}
       <p style="font-size:0.79rem;color:var(--text-dim);margin:0 0 8px;">${h.desc}</p>
       <div class="hero-card-stats">
         <div class="hero-stat">Base CPS<span>${h.baseCps}</span></div>
-        <div class="hero-stat">Cost<span>${fmt(recruitCost)}🎫</span></div>
+        <div class="hero-stat">Cost<span>${fmt(recruitCost)} tickets</span></div>
       </div>
       <div class="hero-card-actions">
-        <button class="btn-hero btn-recruit" ${S.tickets >= recruitCost ? '' : 'disabled'}>Recruit</button>
+        <button class="btn-hero btn-recruit" ${S.tickets >= recruitCost ? '' : 'disabled'}>${candidateMeta.badHire ? 'Recruit Anyway' : 'Recruit'}</button>
       </div>
     `;
     card.querySelector('.btn-recruit').addEventListener('click', () => recruitHero(h.id));
@@ -1892,6 +2236,9 @@ function renderStatsTab() {
   const totalClicks = S.totalClicks || 0;
   const playTime = getPlayTimeStr();
   const officePerks = (S.officePerksChosen || []).map(id => OFFICE_UPGRADES.find(x => x.id === id)).filter(Boolean);
+  const incidentLog = Array.isArray(S.incidentLog) ? S.incidentLog : [];
+  const careerIntel = getCareerIntelMarkup();
+  const careerIntelModel = getCareerIntelModel();
   el.innerHTML = `
     <div class="stats-grid">
       <div class="stat-card"><span class="stat-card-icon">🖥️</span><div class="stat-card-label">Current Title</div><div class="stat-card-value">${tier.icon} ${tier.title}</div></div>
@@ -1912,6 +2259,15 @@ function renderStatsTab() {
       <div class="stat-card"><span class="stat-card-icon">🏅</span><div class="stat-card-label">Achievements</div><div class="stat-card-value">${S.achievedIds.length} / ${ACHIEVEMENTS.length}</div></div>
       <div class="stat-card"><span class="stat-card-icon">⏱️</span><div class="stat-card-label">Play Time</div><div class="stat-card-value">${playTime}</div></div>
     </div>
+    <div class="career-outlook-wrap">
+      <h3 class="career-outlook-title">📈 Career Outlook</h3>
+      <p class="career-intel-summary">${careerIntel.summary}</p>
+      <div class="career-intel-progress">
+        <div class="career-intel-progress-bar" style="width:${careerIntelModel.pct || 0}%"></div>
+      </div>
+      <div class="career-intel-perks">${careerIntel.chips.join('')}</div>
+      <div class="career-intel-reset-note">${careerIntel.resetNote}</div>
+    </div>
     ${officePerks.length ? `
       <div class="office-owned-wrap">
         <h3 class="office-owned-title">🏢 Office Upgrades</h3>
@@ -1928,6 +2284,42 @@ function renderStatsTab() {
         </div>
       </div>
     ` : ''}
+    <div class="incident-log-wrap">
+      <div class="incident-log-header">
+        <h3 class="office-owned-title">🚨 Recent Incident Desk</h3>
+        <span class="incident-log-subtitle">Last ${incidentLog.length || 0} escalations</span>
+      </div>
+      ${incidentLog.length ? `
+        <div class="incident-log-list">
+          ${incidentLog.map(entry => {
+            const tone = getIncidentOutcomeTone(entry);
+            const rewardText = entry.reward > 0 ? `+${fmt(entry.reward)} tickets` : 'No ticket gain';
+            const responderText = entry.responder ? `${entry.responder}${entry.matchLabel ? ` • ${entry.matchLabel}` : ''}` : 'Nobody stepped up';
+            return `
+              <div class="incident-log-item ${tone.cls}">
+                <div class="incident-log-topline">
+                  <div class="incident-log-title-wrap">
+                    <span class="incident-log-icon">${entry.icon}</span>
+                    <div>
+                      <div class="incident-log-title">${entry.title}</div>
+                      <div class="incident-log-meta">Day ${entry.gameDay} • ${entry.severity} • ${entry.category}</div>
+                    </div>
+                  </div>
+                  <span class="incident-log-pill ${tone.cls}">${tone.label}</span>
+                </div>
+                <div class="incident-log-body">
+                  <div><strong>Responder:</strong> ${responderText}</div>
+                  <div><strong>Impact:</strong> ${rewardText}</div>
+                  <div class="incident-log-note">${entry.note || 'Logged for posterity and future blame assignment.'}</div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      ` : `
+        <div class="incident-log-empty">No incidents logged yet. Enjoy the temporary illusion of control.</div>
+      `}
+    </div>
   `;
 }
 
@@ -2017,7 +2409,8 @@ function closeHelp() {
 
 function openFeedback() {
   document.getElementById('feedback-modal').classList.remove('hidden');
-  document.getElementById('feedback-status').textContent = '';
+  document.getElementById('feedback-status').textContent = FEEDBACK_ALLOWED ? '' : 'Feedback is disabled in previews. Nothing will be sent.';
+  document.getElementById('btn-submit-feedback').disabled = !FEEDBACK_ALLOWED;
 }
 
 function closeFeedback() {
@@ -2026,6 +2419,7 @@ function closeFeedback() {
 
 async function submitFeedback(evt) {
   evt.preventDefault();
+  if (!FEEDBACK_ALLOWED) return;
   const type = document.getElementById('feedback-type').value;
   const message = document.getElementById('feedback-message').value.trim();
   const email = document.getElementById('feedback-email').value.trim();
@@ -2074,25 +2468,28 @@ async function submitFeedback(evt) {
 // SOUND TOGGLE
 // ══════════════════════════════════════════════════════════════
 function toggleClockedOut() {
+  const now = Date.now();
   if (S.clockedOut) {
     S.clockedOut = false;
-    const offMs = Date.now() - (S.clockedOutAt || Date.now());
+    const offMs = now - (S.clockedOutAt || now);
     S.clockedOutAt = null;
+    S.shiftGraceUntil = now + 20_000;
     if (offMs >= 60_000) {
-      S.restedBuffUntil = Date.now() + 120_000;
-      toast('☀️ Clocked back in. Rested bonus active for 2 minutes.', 'green');
+      S.restedBuffUntil = now + 120_000;
+      toast('☀️ Clocked back in. Rested bonus active for 2 minutes, plus 20 seconds of incident grace.', 'green');
     } else {
-      toast('☀️ Back on shift. That break barely counts, but fine.', 'green');
+      toast('☀️ Back on shift. Barely a break, but you still get 20 seconds before the next fire.', 'green');
     }
   } else {
     S.clockedOut = true;
-    S.clockedOutAt = Date.now();
+    S.clockedOutAt = now;
     S.restedBuffUntil = 0;
+    S.shiftGraceUntil = 0;
     if (activeIncident) {
       dismissIncident(false, true);
-      toast('🕒 Clocked out. Current incident deferred to the next poor soul.', 'gold');
+      toast('🕒 Clocked out. Current incident deferred. The queue can scream into the void without you for a bit.', 'gold');
     } else {
-      toast('🕒 Clocked out. Click income halted; squad keeps the lights on at 60%.', 'gold');
+      toast('🕒 Clocked out. Click income halted, incidents paused, squad keeps the lights on at 60%.', 'gold');
     }
   }
   renderStats();
@@ -2153,6 +2550,7 @@ function loadGame() {
     merged.officeMods = Object.assign({}, defaults.officeMods, saved.officeMods || {});
     merged.officePerksChosen = Array.isArray(saved.officePerksChosen) ? saved.officePerksChosen : [];
     merged.officeDraftChoices = Array.isArray(saved.officeDraftChoices) ? saved.officeDraftChoices : [];
+    merged.incidentLog = Array.isArray(saved.incidentLog) ? saved.incidentLog.slice(0, 8) : [];
     S = merged;
     // Restore non-serializable (timers)
     S.comboTimer = null;
@@ -2267,6 +2665,11 @@ function initTabs() {
     else if (action === 'click') document.getElementById('main-clicker').click();
     else if (action === 'incident') openDispatchModal();
     else if (action === 'help') openHelp();
+    else if (action === 'claim-first-shift') {
+      if (claimOnboardingReward('firstShiftComplete')) {
+        renderOnboarding();
+      }
+    }
   });
   // Incident: RESPOND NOW opens dispatch modal
   document.getElementById('incident-resolve').addEventListener('click', openDispatchModal);

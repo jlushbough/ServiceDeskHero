@@ -1,660 +1,123 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Service Desk Hero — Chuck Sterling's Rise to CIO</title>
-    <meta
-      name="description"
-      content="Click, automate, and climb the IT ladder from Help Desk Analyst to CIO in this addicting idle clicker game. Build your squad, resolve incidents, and prove you have what it takes."
-    />
-    <link rel="canonical" href="https://www.servicedeskhero.com/" />
-
-    <!-- Favicon -->
-    <link rel="icon" type="image/png" href="assets/favicon.png" />
-    <link rel="apple-touch-icon" href="assets/favicon.png" />
-
-    <!-- PWA -->
-    <link rel="manifest" href="manifest.json" />
-    <meta name="theme-color" content="#7c5cfc" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-
-    <!-- Open Graph -->
-    <meta property="og:title" content="Service Desk Hero — Rise to CIO" />
-    <meta property="og:description" content="Click, automate, and climb the IT ladder from Help Desk Analyst to CIO. Build your squad, resolve incidents, master the skill tree." />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://www.servicedeskhero.com/" />
-    <meta property="og:image" content="https://www.servicedeskhero.com/assets/og-image.png" />
-
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Service Desk Hero — Rise to CIO" />
-    <meta name="twitter:description" content="The idle clicker game for IT pros. Resolve tickets, build your squad, climb to CIO." />
-
-    <!-- Fonts & Styles -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="css/base.css" />
-    <link rel="stylesheet" href="css/layout.css" />
-    <link rel="stylesheet" href="css/components.css" />
-    <link rel="stylesheet" href="css/animations.css" />
-
-    <style>
-      .difficulty-modal-panel {
-        max-width: 720px;
-        width: min(720px, calc(100% - 2rem));
-        border-color: rgba(168, 85, 247, 0.5);
-        background: linear-gradient(155deg, rgba(37, 18, 80, 0.96), rgba(76, 29, 149, 0.95));
-        box-shadow: 0 26px 72px rgba(0, 0, 0, 0.7), 0 0 45px rgba(167, 139, 250, 0.3);
-      }
-      .difficulty-modal-panel p {
-        color: var(--text-dim);
-        margin-top: 0.5rem;
-      }
-      .difficulty-options {
-        margin-top: 1rem;
-        display: grid;
-        gap: 0.75rem;
-      }
-      .difficulty-option-btn {
-        border: 1px solid rgba(168, 85, 247, 0.35);
-        background: rgba(124, 92, 252, 0.16);
-        color: var(--text);
-        border-radius: 12px;
-        padding: 0.9rem 1rem;
-        text-align: left;
-        cursor: pointer;
-        transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
-      }
-      .difficulty-option-btn:hover,
-      .difficulty-option-btn:focus-visible {
-        border-color: rgba(196, 181, 253, 0.8);
-        background: rgba(196, 181, 253, 0.2);
-        transform: translateY(-1px);
-      }
-      .difficulty-option-btn .difficulty-name {
-        font-size: 1.05rem;
-        font-weight: 700;
-      }
-      .difficulty-option-btn .difficulty-meta {
-        color: var(--text-muted);
-        font-size: 0.85rem;
-      }
-    </style>
-  </head>
-  <body>
-    <!-- ========== HEADER ========== -->
-    <header id="game-header" role="banner">
-      <div class="header-left">
-        <span class="game-logo" aria-label="Service Desk Hero">🖥️ Service Desk Hero</span>
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Service Desk Hero — The Office Dungeon</title>
+  <meta name="description" content="Read the report, question the user, and find the real fault. An IT helpdesk game with an incoming queue, generous early SLAs, and technical boss battles.">
+  <link rel="canonical" href="https://www.servicedeskhero.com/">
+  <meta property="og:title" content="Service Desk Hero — First Shift">
+  <meta property="og:description" content="Read, contact users, and balance tickets with testing. Prevent major incidents by making good decisions.">
+  <meta property="og:type" content="website"><meta property="og:url" content="https://www.servicedeskhero.com/">
+  <meta property="og:image" content="https://www.servicedeskhero.com/assets/og-image.png">
+  <meta name="theme-color" content="#10111e"><link rel="icon" href="assets/favicon.png"><link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="css/rush.css"><link rel="stylesheet" href="css/workspace.css"><link rel="stylesheet" href="css/dungeon.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to game</a>
+<header class="app-header">
+  <a class="brand" href="./" aria-label="Service Desk Hero home"><span class="brand-icon" aria-hidden="true">&gt;_</span><span>service desk<span class="brand-hero">hero</span></span></a>
+  <div class="header-label"><span class="live-dot"></span> DEV PLAYTEST</div>
+  <nav aria-label="Game navigation"><button id="sound-button" class="icon-button" aria-pressed="false" aria-label="Enable sound">Sound off</button><a href="career.html" class="career-link">Career mode <span aria-hidden="true">↗</span></a></nav>
+</header>
+<main id="main" tabindex="-1">
+  <section id="lobby" class="lobby" aria-labelledby="lobby-title">
+    <div class="lobby-copy">
+      <div class="eyebrow"><span class="pill purple">NEW SHIFT</span> THREE FLOORS · ONE QUESTIONABLE CAREER</div>
+      <h1 id="lobby-title">Enter the<br><span>office dungeon.</span></h1>
+      <p class="intro">Build your class. Survive three floors of corporate nonsense. Go home to people who remember your choices.<br class="desktop-only"> First Sev 3? Read freely, then ACK for a 15-minute SLA.</p>
+      <div class="class-picker" role="group" aria-label="Choose your class">
+        <button id="engineer-class" class="class-button selected" aria-pressed="true"><span aria-hidden="true">⌘</span><div><strong>Root Cause Ranger</strong><small>Knowledge is power. +25 per real fix.</small></div></button>
+        <button id="faker-class" class="class-button" aria-pressed="false"><span aria-hidden="true">♜</span><div><strong>Fake It Till You Make It</strong><small>Bluff low-tech bosses. Still fix the problem.</small></div></button>
       </div>
-      <div class="header-center">
-        <span class="career-title-label">Current Title:</span>
-        <span id="career-title" class="career-title-value"
-          >Help Desk Analyst</span
-        >
-        <div class="career-progress-wrap" role="progressbar" aria-label="Career progress">
-          <div id="career-progress-bar" class="career-progress-bar"></div>
-        </div>
-      </div>
-      <div class="header-right">
-        <button id="btn-feedback" class="btn-hdr" aria-label="Send feedback" title="Send Feedback">💬</button>
-        <button id="btn-sound" class="btn-hdr" aria-label="Toggle sound effects" title="Toggle Sound">🔊</button>
-        <button id="btn-help" class="btn-hdr" aria-label="How to play" title="How to Play">❓</button>
-        <span id="save-indicator" class="save-indicator">💾 Saved</span>
-        <button id="btn-save" class="btn-hdr" aria-label="Save game">Save</button>
-        <button id="btn-reset" class="btn-hdr btn-danger" aria-label="Reset game">Reset</button>
-      </div>
-    </header>
-
-    <!-- ========== INCIDENT BANNER ========== -->
-    <div id="incident-banner" class="incident-banner hidden" role="alert">
-      <div class="incident-inner">
-        <span id="incident-icon" class="incident-icon">🚨</span>
-        <div class="incident-copy">
-          <div class="incident-topline">
-            <span id="incident-severity" class="incident-severity">SEV-2</span>
-            <span id="incident-title" class="incident-title">Critical Incident</span>
-          </div>
-          <div id="incident-text" class="incident-text"></div>
-          <div id="incident-meta" class="incident-meta"></div>
-        </div>
-        <button id="incident-resolve" class="btn-incident" aria-label="Respond to incident">RESPOND NOW</button>
-        <span id="incident-timer" class="incident-timer"></span>
-      </div>
+      <div id="lobby-stats" class="stat-allocation" role="group" aria-label="Allocate two starting stat points"></div><p id="lobby-stat-hint" class="allocation-hint"></p>
+      <div class="progression-preview"><span class="pill purple">SEV 3</span><span>15 min after acknowledgement</span><span class="progression-later">Preventable SEV 2 · 3 min / later SEV 1 · 60s</span></div>
+      <button id="start-button" class="primary-button start-button"><span>Enter floor one</span><span class="keycap">ENTER</span></button>
+      <div class="start-meta"><span id="daily-label"></span><span id="best-label">Local best: —</span></div>
+      <p class="small-note">Original scripted dungeon playtest. Fictional people, local choices. No live AI or real workplace messages.</p>
     </div>
+    <div class="lobby-right">
+      <div class="sample-ticket">
+        <div class="sample-top"><span class="pill coral">SEV 3 · AWAITING ACK</span><span class="mono">#0001</span></div>
+        <div class="dungeon-sigil" aria-hidden="true"><span>⌘</span><i>I</i><i>II</i><i>III</i></div>
+        <h2>The dungeon has dental.</h2>
+        <p>The printer hoards addresses. The final boss has a calendar invite.<br><span class="muted">Your cat has already defeated your keyboard.</span></p>
+        <div class="sample-divider"></div>
+        <div class="sample-bottom"><span><span class="live-dot"></span> Ready when you are</span><span>the clock has not started</span></div>
+      </div>
+      <ol class="how-to">
+        <li><span>01</span><div><strong>Learn the floor</strong><p>New issues arrive every 30–120 seconds. Early SLAs wait for acknowledgement.</p></div></li>
+        <li><span>02</span><div><strong>Build your particular disaster</strong><p>Earn stats, branch your skills, and choose dubious equipment. Every solution is discoverable through questions and diagnostics.</p></div></li>
+        <li><span>03</span><div><strong>Clock out. Carry it forward.</strong><p>Testing prevents major incidents. Home choices and coworker messages shape the following day. Rest is useful. So is being a person.</p></div></li>
+      </ol>
+    </div>
+  </section>
 
-    <!-- ========== MAIN LAYOUT ========== -->
-    <main id="game-main" role="main">
-      <!-- ===== LEFT PANEL: Avatar + Clicker + Stats ===== -->
-      <aside id="left-panel" aria-label="Player stats and clicker">
-        <div class="panel avatar-panel">
-          <div id="avatar" class="avatar">
-            <span class="avatar-initials">CS</span>
-            <div class="avatar-ring"></div>
-            <div id="click-burst" class="click-burst"></div>
-          </div>
-          <div class="hero-info">
-            <h1 id="hero-name">Chuck Sterling</h1>
-            <div class="xp-bar-wrap" role="progressbar" aria-label="Experience points">
-              <div id="xp-bar" class="xp-bar"></div>
-              <span id="xp-label" class="xp-label">0 / 100 XP</span>
-            </div>
-            <div class="level-badge">Lvl <span id="hero-level">1</span></div>
-            <div id="game-day-label" class="game-day-badge">Day 1</div>
-          </div>
-        </div>
-
-        <div class="panel clicker-panel">
-          <div class="combo-area">
-            <div id="combo-meter" class="combo-meter hidden" aria-live="polite">
-              <span class="combo-label">COMBO</span>
-              <span id="combo-count">x1</span>
-            </div>
-          </div>
-          <button id="main-clicker" class="main-clicker-btn" aria-label="Resolve a ticket">
-            <span class="btn-icon">🎫</span>
-            <span class="btn-text">Resolve Ticket</span>
-            <span id="click-power-label" class="click-power">+1 ticket</span>
-          </button>
-          <div class="shift-controls">
-            <button id="btn-clock-toggle" class="btn-clock-toggle">🕒 Clock Out</button>
-            <div id="shift-status" class="shift-status">On Shift</div>
-          </div>
-          <div class="clicker-stats">
-            <div class="stat-row">
-              <span>Tickets Resolved</span
-              ><strong id="tickets-display">0</strong>
-            </div>
-            <div class="stat-row">
-              <span>Lifetime Tickets</span
-              ><strong id="lifetime-display">0</strong>
-            </div>
-            <div class="stat-row">
-              <span>Per Click</span><strong id="per-click-display">1</strong>
-            </div>
-            <div class="stat-row">
-              <span>Per Second</span><strong id="per-sec-display">0</strong>
-            </div>
-            <div class="stat-row">
-              <span>Per Minute</span><strong id="per-min-display">0</strong>
-            </div>
-            <div class="stat-row">
-              <span>Difficulty</span><strong id="difficulty-display">Medium</strong>
-            </div>
-            <div class="stat-row prestige-row">
-              <span>🏆 Promotions</span><strong id="prestige-display">0</strong>
-            </div>
-            <div class="stat-row prestige-row">
-              <span>⚡ Prestige Bonus</span
-              ><strong id="prestige-bonus-display">×1.0</strong>
-            </div>
-            <div class="stat-row prestige-row" id="office-upgrades-row" style="display:none;">
-              <span>🪑 Office Upgrades</span><strong id="office-upgrades-display">0</strong>
-            </div>
-            <div class="stat-row strikes-row" id="strikes-row" style="color:var(--red); display:none; border-top:1px solid rgba(248,113,113,0.3); padding-top:8px; margin-top:8px;">
-              <span>❌ Strikes</span><strong id="strikes-display">0 / 3</strong>
-            </div>
-          </div>
-        </div>
-
-        <div class="panel onboarding-panel" id="onboarding-panel">
-          <div class="onboarding-head">
-            <h2 class="onboarding-title">⚡ Quick Start</h2>
-            <button id="btn-dismiss-onboarding" class="onboarding-dismiss" aria-label="Dismiss quick start">×</button>
-          </div>
-          <p id="onboarding-tip" class="onboarding-tip">Clear a few tickets to get the queue moving.</p>
-          <div id="onboarding-checklist" class="onboarding-checklist"></div>
-          <button id="btn-onboarding-action" class="btn-onboarding-action">Get Started</button>
-        </div>
-
-        <div class="panel promotion-panel hidden" id="promotion-panel">
-          <h2 class="promo-title" id="promo-title">🚀 Promotion Ready!</h2>
-          <p id="promo-description" class="promo-desc"></p>
-          <button id="btn-promote" class="btn-promote" aria-label="Accept promotion">Accept Promotion</button>
-        </div>
-      </aside>
-
-      <!-- ===== CENTER PANEL: Tabbed Content ===== -->
-      <section id="center-panel" aria-label="Game tabs">
-        <!-- Tab Nav -->
-        <div class="tab-nav" role="tablist" aria-label="Game sections">
-          <button class="tab-btn active" data-tab="squad" role="tab" aria-selected="true" aria-controls="tab-squad">👥 Squad</button>
-          <button class="tab-btn" data-tab="upgrades" role="tab" aria-selected="false" aria-controls="tab-upgrades">🛒 Upgrades</button>
-          <button class="tab-btn" data-tab="skills" role="tab" aria-selected="false" aria-controls="tab-skills">🧠 Skills</button>
-          <button class="tab-btn" data-tab="achievements" role="tab" aria-selected="false" aria-controls="tab-achievements">🏅 Achievements</button>
-          <button class="tab-btn" data-tab="stats" role="tab" aria-selected="false" aria-controls="tab-stats">📊 Stats</button>
-        </div>
-
-        <!-- ── SQUAD TAB ── -->
-        <div class="tab-pane active" id="tab-squad" role="tabpanel">
-          <div class="tab-header">
-            <h2>Your Squad</h2>
-            <p class="tab-desc">
-              Dispatch specialized IT heroes to auto-resolve tickets. Each hero
-              levels up and earns bonuses for your whole team.
-            </p>
-          </div>
-          <div id="squad-roster" class="squad-roster"></div>
-
-          <div class="squad-bench-header" style="display:flex; justify-content:space-between; align-items:center; margin-top: 1.5rem;">
-            <div style="display:flex; align-items:center; gap: 12px;">
-              <h3 style="margin:0;">Available Recruits</h3>
-              <button id="btn-refresh-board" style="
-                padding: 4px 10px;
-                font-size: 0.75rem;
-                background: rgba(124,92,252,0.15);
-                border: 1px solid rgba(124,92,252,0.3);
-                color: #c4b5fd;
-                border-radius: 6px;
-                cursor: pointer;
-                transition: all 0.15s ease;
-                white-space: nowrap;
-              " onmouseover="this.style.background='rgba(124,92,252,0.3)'" onmouseout="this.style.background='rgba(124,92,252,0.15)'"
-              >🔄 Refresh (500🎫)</button>
-            </div>
-          </div>
-          <div id="recruit-roster" class="recruit-roster"></div>
-        </div>
-
-        <!-- ── UPGRADES TAB ── -->
-        <div class="tab-pane" id="tab-upgrades" role="tabpanel">
-          <div class="tab-header">
-            <h2>Command Center Upgrades</h2>
-            <p class="tab-desc">
-              Invest in tools, automation, and infrastructure. Costs scale 18%
-              per purchase.
-            </p>
-          </div>
-          <div id="upgrades-list" class="upgrades-list"></div>
-        </div>
-
-        <!-- ── SKILLS TAB ── -->
-        <div class="tab-pane" id="tab-skills" role="tabpanel">
-          <div class="tab-header">
-            <h2>Skill Tree</h2>
-            <p class="tab-desc">
-              Spend Skill Points (earned on level-up) to unlock permanent
-              abilities.
-              <span id="skill-points-label" class="skill-pts"
-                >0 SP available</span
-              >
-            </p>
-          </div>
-          <div id="skill-tree" class="skill-tree"></div>
-        </div>
-
-        <!-- ── ACHIEVEMENTS TAB ── -->
-        <div class="tab-pane" id="tab-achievements" role="tabpanel">
-          <div class="tab-header">
-            <h2>Achievements</h2>
-            <p class="tab-desc">
-              Milestones that permanently boost your stats.
-            </p>
-          </div>
-          <div id="achievements-grid" class="achievements-grid"></div>
-        </div>
-
-        <!-- ── STATS TAB ── -->
-        <div class="tab-pane" id="tab-stats" role="tabpanel">
-          <div class="tab-header">
-            <h2>Career Statistics</h2>
-            <p class="tab-desc">
-              Your complete career history and play stats.
-            </p>
-          </div>
-          <div id="stats-content" class="stats-content"></div>
-          <div class="stats-actions">
-            <button id="btn-share" class="btn-share">📋 Copy Stats to Clipboard</button>
-            <button id="btn-export" class="btn-export">💾 Export Save</button>
-            <button id="btn-import" class="btn-import">📂 Import Save</button>
-          </div>
-          <input type="file" id="import-file-input" accept=".json,.txt" style="display:none" />
-        </div>
+  <section id="game" hidden aria-label="First Shift game">
+    <div class="shift-strip"><span id="phase-name">THE TRAINING DESK</span><span id="shift-flavor">Read first. Acknowledge when ready.</span><button id="character-button" class="text-button">Floor 1 · Lv 1</button><button id="pause-button" class="text-button">Pause <kbd>P</kbd></button></div>
+    <div class="hud">
+      <div class="hud-time"><span class="stat-label">HANDLED</span><strong id="time" aria-label="Issues handled out of fourteen">0 / 14</strong><div class="time-track"><div id="time-fill"></div></div></div>
+      <div><span class="stat-label">SCORE</span><strong id="score">0</strong><span id="score-pop" class="score-pop"></span></div>
+      <div><span class="stat-label">STREAK</span><strong id="streak">0<span>×</span></strong><span id="streak-note" class="hud-sub">Make it stick</span></div>
+      <div class="morale-hud"><span class="stat-label">MORALE <b id="morale-number">100%</b></span><div class="morale-track" role="progressbar" aria-label="Team morale" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" id="morale-meter"><div id="morale-fill"></div></div><span id="morale-text" class="hud-sub">Cautiously optimistic</span></div>
+    </div>
+    <nav id="desk-tabs" class="desk-tabs" role="tablist" aria-label="Service desk workstreams">
+      <button id="tab-inc" role="tab" data-desk-tab="inc" aria-controls="ticket-workspace" aria-selected="true">INC <span data-count="inc">0</span><b data-unread="inc" hidden></b></button>
+      <button id="tab-req" role="tab" data-desk-tab="req" aria-controls="ticket-workspace" aria-selected="false" tabindex="-1">REQ <span data-count="req">0</span><b data-unread="req" hidden></b></button>
+      <button id="tab-projects" role="tab" data-desk-tab="projects" aria-controls="task-workspace" aria-selected="false" tabindex="-1">Projects <span data-count="projects">0</span><b data-unread="projects" hidden></b></button>
+      <button id="tab-ktlo" role="tab" data-desk-tab="ktlo" aria-controls="task-workspace" aria-selected="false" tabindex="-1">KTLO <span data-count="ktlo">0</span><b data-unread="ktlo" hidden></b></button>
+      <button id="tab-training" role="tab" data-desk-tab="training" aria-controls="training-workspace" aria-selected="false" tabindex="-1">Training</button>
+    </nav>
+    <div class="desk-toolbar"><div id="desk-filters" role="group" aria-label="Case status"><button data-desk-filter="active" aria-pressed="true">Active</button><button data-desk-filter="hold" aria-pressed="false">Hold</button><button data-desk-filter="resolved" aria-pressed="false">Resolved</button></div><span id="open-total" aria-label="Total open tickets">1 open</span><button id="desk-alert-button" class="desk-alert" hidden></button></div>
+    <div id="desk-content">
+      <section id="ticket-workspace" class="workspace" role="tabpanel" aria-labelledby="tab-inc">
+        <aside class="queue-panel" aria-label="Ticket queue"><div class="panel-title"><h2 id="workstream-heading">Incidents</h2><span id="queue-count" class="count-badge">1 active</span></div><div id="queue" class="ticket-queue" tabindex="0" aria-label="Case list"></div></aside>
+        <section id="ticket-detail" class="ticket-panel" aria-label="Selected case" tabindex="0">
+          <div class="detail-toolbar"><div id="sla-panel" class="sla-panel"><div><span class="stat-label">SLA</span><strong id="sla-time">Not started</strong></div><p id="sla-rule">Sev 3 · starts when you acknowledge</p></div><button id="hold-button" class="secondary-button">Hold</button></div>
+          <p id="hold-notice" class="hold-notice" hidden>On hold. Running SLAs keep counting down. Resume to work on this case.</p><p id="history-status" class="history-status" hidden></p>
+          <div id="active-ticket"></div>
+          <div id="empty-ticket" hidden><span aria-hidden="true">☕</span><h2>Desk is quiet.</h2><p>The next call is on its way.</p><button id="skip-idle-button" class="secondary-button">Take next call now</button><button id="next-open-button" class="secondary-button" hidden>Open next active case</button></div>
+          <button id="acknowledge-button" class="primary-button acknowledge-button">Acknowledge issue</button><p id="acknowledged-note" class="acknowledged-note" hidden></p><div id="boss-reaction" class="boss-reaction" hidden></div><div id="boss-status" class="boss-status" hidden></div>
+          <div id="action-area"><div class="investigation-toolbar" role="group" aria-label="Choose how to troubleshoot"><button id="fix-view-button" class="approach-button selected" aria-pressed="true">Fix issue</button><button id="contact-user-button" class="approach-button" aria-pressed="false">Contact user</button><button id="diagnostics-button" class="approach-button" aria-pressed="false">Diagnostics</button></div><p id="approach-hint" class="approach-hint"></p><div id="investigation-options" class="investigation-options" hidden></div>
+          <div id="fix-options"><div class="action-heading"><span>YOUR MOVE</span><span class="keyboard-hint"><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></span></div><div id="actions" class="actions"></div><button id="assist-button" class="assist-button"><span>☎ Ask a teammate</span><span id="assist-count">3 left · +75 pts</span></button><button id="bluff-button" class="bluff-button" hidden><strong>“Let’s strategically realign the deliverables.”</strong><span id="bluff-description"></span></button></div></div>
+          <details id="evidence-drawer"><summary>Case notes <span id="evidence-count">0</span></summary><section id="case-notes" class="case-notes" aria-label="Collected evidence"></section></details>
+        </section>
       </section>
-    </main>
-
-    <!-- ========== TOAST AREA ========== -->
-    <div id="toast-area" class="toast-area" aria-live="polite"></div>
-
-    <!-- ========== FLOATING CLICK NUMBERS ========== -->
-    <div id="float-layer" class="float-layer"></div>
-
-    <!-- ========== DIFFICULTY MODAL ========== -->
-    <div id="difficulty-modal" class="help-modal hidden">
-      <div class="help-overlay" id="difficulty-overlay"></div>
-      <div class="help-panel difficulty-modal-panel">
-        <h2>ðŸ”´ Choose Your Difficulty</h2>
-        <p>Set the pace of your promotion run before you begin. You can still win, just maybe slower.</p>
-        <div class="difficulty-options">
-          <button type="button" class="difficulty-option-btn" data-difficulty="easy">
-            <span class="difficulty-name">Easy</span>
-            <span class="difficulty-meta">~1 hour to CIO</span>
-          </button>
-          <button type="button" class="difficulty-option-btn" data-difficulty="medium">
-            <span class="difficulty-name">Medium</span>
-            <span class="difficulty-meta">~5 hours to CIO</span>
-          </button>
-          <button type="button" class="difficulty-option-btn" data-difficulty="hard">
-            <span class="difficulty-name">Hard</span>
-            <span class="difficulty-meta">~10 hours to CIO</span>
-          </button>
-          <button type="button" class="difficulty-option-btn" data-difficulty="insane">
-            <span class="difficulty-name">Maybe Try a Real Job?</span>
-            <span class="difficulty-meta">~100 hours to CIO</span>
-          </button>
-        </div>
-      </div>
+      <section id="task-workspace" class="task-board" role="tabpanel" aria-labelledby="tab-projects" hidden tabindex="0"><h2 id="task-heading">Projects</h2><p id="task-description" class="panel-caption">One pair of hands. Test + release: +450. Correct self-created risks without bonus. Defer safely if needed.</p><div id="risk-register"></div><div id="projects"></div><p id="task-empty" hidden></p></section>
+      <section id="training-workspace" role="tabpanel" aria-labelledby="tab-training" hidden tabindex="0"><h2>Desk field guide</h2><p>Look things up while you work. Training does not pause the queue; use Pause if you need a break.</p><details open><summary>INC, REQ, Projects and KTLO</summary><p>INC restores broken services. REQ handles the current shift’s layout, playback and print-setting requests. Projects tests and releases changes. KTLO means “keep the lights on”: prevent a known risk before it becomes an incident.</p></details><details><summary>Acknowledge, hold and resolve</summary><p>Sev 3 has no deadline until you acknowledge it, then 15 minutes. Sev 2 has 3 minutes from report; earned Sev 1 has 60 seconds. Hold organizes your work; it never pauses or resets an SLA. Resume a held case before acting. Resolved keeps the facts and outcome, including missed SLAs.</p></details><details><summary>Diagnose without guessing</summary><p>The caller’s claim may be wrong. Ask specific questions or run diagnostics to collect all the information needed. Leading questions and unrelated preferences waste time, but never lock out useful evidence. A correct first try earns +25 for direct diagnosis or useful evidence, once per stage; you can still finish the shift by learning as you go.</p></details><details><summary>Prevent the next incident</summary><p>Test a project for 18 seconds, then release the verified change for +450. An untested release creates a 60-second risk; use the KTLO rollback/test task before impact to avoid the incident; self-created risks earn no prevention bonus. These tasks share your time with tickets. Interrupt unfinished project work when an urgent issue arrives. Safely deferring an unreleased project earns no points and creates no risk.</p></details><details><summary>Workarounds, bosses and shortcuts</summary><p>A workaround returns in 11 seconds with its original SLA. Boss stages share one deadline. A successful Faker bluff buys 10 seconds but does not fix the fault. A acknowledges; 1–3 chooses an answer; Q/E changes the visible case; P pauses. Arrow keys move between workstream tabs.</p></details></section>
     </div>
+    <div id="work-status" class="work-status" hidden role="status"><div class="work-top"><span id="work-label">Working…</span><span id="work-seconds" aria-hidden="true"></span><button id="cancel-work-button" class="text-button" hidden>Interrupt project</button></div><div class="work-track" aria-hidden="true"><div id="work-fill"></div></div></div>
+    <div class="desk-foot"><span id="next-arrival"></span><span id="resolved-label">0 tickets closed</span><button id="inbox-button" class="text-button">Inbox <b id="inbox-count">2</b></button><button id="system-button" class="text-button">System log</button></div><div id="outcome" class="outcome" role="status" aria-live="polite"></div>
+  </section>
+  <dialog id="system-dialog" aria-labelledby="system-title"><div class="system-dialog-content"><button id="close-system-button" class="secondary-button">Close log</button><h2 id="system-title">The System · S.L.A.</h2><p id="chuck-message"></p><div id="feed" class="feed"></div><div id="earned-achievements" class="earned-achievements"></div><p>Sentient Liability Administrator · scripted playtest supervisor</p></div></dialog>
 
-    <!-- ========== HOW TO PLAY MODAL ========== -->
-    <div id="help-modal" class="help-modal hidden">
-      <div class="help-overlay" id="help-overlay"></div>
-      <div class="help-panel">
-        <h2>🖥️ How to Play</h2>
-        <p class="help-lead">Three things matter at the start: click tickets, hire one competent gremlin, and do not ignore incidents.</p>
-        <div class="help-grid compact">
-          <div class="help-card">
-            <span class="help-card-icon">1️⃣</span>
-            <h3>Farm Tickets Fast</h3>
-            <p>Hammer <strong>Resolve Ticket</strong> to build early momentum and combo bonuses.</p>
-          </div>
-          <div class="help-card">
-            <span class="help-card-icon">2️⃣</span>
-            <h3>Recruit Early</h3>
-            <p>Your first hire gives passive throughput and makes the game feel less like unpaid overtime.</p>
-          </div>
-          <div class="help-card">
-            <span class="help-card-icon">3️⃣</span>
-            <h3>Respect Incidents</h3>
-            <p>Incidents are high-reward panic events. Ignore them and you earn strikes. Three strikes and HR wins.</p>
-          </div>
-        </div>
-        <button id="btn-close-help" class="btn-close-help">Got It — Let’s Cause Some Process Improvement 🚀</button>
-      </div>
+  <section id="results" class="results" hidden aria-labelledby="result-title" tabindex="-1">
+    <div class="result-ticket">
+      <div class="receipt-top"><span class="brand-mini">SERVICE DESK HERO</span><span id="result-mode" class="pill purple">SHIFT REPORT</span></div>
+      <span class="result-eyebrow" id="result-status">SHIFT COMPLETE</span><h1 id="result-title">Queue Whisperer</h1><p id="result-line"></p>
+      <div class="final-score"><span id="final-score">0</span><small>POINTS</small></div><span id="new-best" class="pill lime" hidden>NEW LOCAL BEST</span>
+      <div class="result-grid"><div><strong id="result-fixed">0</strong><span>lasting fixes</span></div><div><strong id="result-streak">0</strong><span>best streak</span></div><div><strong id="result-morale">0%</strong><span>morale left</span></div></div>
+      <div class="result-breakdown" id="result-breakdown"></div><div id="result-achievements" class="result-achievements"></div><p class="result-tip" id="result-tip"></p>
+      <div id="dungeon-summary" class="dungeon-summary"></div><button id="go-home-button" class="primary-button">Clock out · go home</button><button id="replay-button" class="secondary-button">Start a new run</button><button id="share-button" class="secondary-button">Copy challenge</button><textarea id="share-fallback" aria-label="Challenge text to copy" readonly hidden></textarea><span id="share-status" class="small-note" role="status"></span>
+      <div class="result-links"><button id="menu-button" class="text-button">Change class</button><a href="career.html">Build a career ↗</a></div><div class="receipt-bottom">TICKET CLOSED. PROBABLY.</div>
     </div>
+    <p class="small-note">A finite shift: 12 tickets, 2 bosses, and 2 projects. Major incidents depend on your decisions. Replay the same daily cases. Scores stay on this device.</p>
+  </section>
 
-    <!-- ========== FEEDBACK MODAL ========== -->
-    <div id="feedback-modal" class="help-modal hidden">
-      <div class="help-overlay" id="feedback-overlay"></div>
-      <div class="help-panel feedback-panel">
-        <h2>💬 Send Feedback</h2>
-        <p class="help-lead">Bug, idea, balance gripe, UX complaint — send it. It goes into the real backlog.</p>
-        <form id="feedback-form" class="feedback-form">
-          <label class="feedback-label">
-            Type
-            <select id="feedback-type" class="feedback-input">
-              <option value="bug">Bug</option>
-              <option value="idea">Idea</option>
-              <option value="balance">Balance</option>
-              <option value="ux">UX</option>
-            </select>
-          </label>
-          <label class="feedback-label">
-            Message
-            <textarea id="feedback-message" class="feedback-input feedback-textarea" maxlength="1500" placeholder="Tell us what broke, what felt weird, or what should exist."></textarea>
-          </label>
-          <label class="feedback-label">
-            Optional contact
-            <input id="feedback-email" class="feedback-input" type="email" maxlength="200" placeholder="you@example.com" />
-          </label>
-          <div class="feedback-actions">
-            <button type="button" id="btn-close-feedback" class="btn-hdr">Cancel</button>
-            <button type="submit" id="btn-submit-feedback" class="btn-close-help">Send Feedback</button>
-          </div>
-          <div id="feedback-status" class="feedback-status"></div>
-        </form>
-      </div>
-    </div>
+  <section id="home" class="home-scene" hidden aria-labelledby="home-title" tabindex="-1">
+    <header class="home-heading"><span class="eyebrow">OFF DUTY · ALL WORK CLOCKS STOPPED</span><h1 id="home-title">You made it home.</h1><p id="home-intro">The cat has filed a ticket against gravity. You are not on call for this one.</p></header>
+    <div id="home-relationships" class="home-relationships"></div>
+    <div class="home-columns"><section class="home-card"><h2>Reclaim your evening</h2><p>One activity tonight. Your choice carries into tomorrow.</p><div id="evening-options"></div><p id="evening-result" class="choice-result" role="status"></p></section><section class="home-card"><h2 id="conversation-title">People, outside the queue</h2><p id="conversation-context"></p><p id="conversation-prompt"></p><div id="conversation-options"></div><p id="conversation-result" class="choice-result" role="status"></p></section></div>
+    <div class="home-foot"><p id="tomorrow-preview"></p><button id="next-day-button" class="primary-button" disabled>Begin the next workday</button><button id="home-menu-button" class="text-button">End this run</button></div>
+  </section>
+</main>
+<footer class="app-footer"><span>A love letter to everyone who’s ever said “have you tried restarting it?”</span><span>Made for the people behind the tickets</span></footer>
 
-    <!-- ========== OFFICE INTERLUDE MODAL ========== -->
-    <div id="office-interlude-modal" class="help-modal hidden">
-      <div class="help-overlay"></div>
-      <div class="help-panel office-interlude-panel">
-        <h2>🏢 Promotion Interlude</h2>
-        <p class="help-lead">New title. New furniture. Pick one permanent office upgrade before the next round of nonsense begins.</p>
-        <div id="office-choice-list" class="office-choice-list"></div>
-      </div>
-    </div>
-
-    <!-- ========== FIRED MODAL ========== -->
-    <div id="fired-modal" class="help-modal hidden">
-      <div class="help-overlay"></div>
-      <div class="help-panel" style="border-color: var(--red); box-shadow: 0 0 80px rgba(248,113,113,0.3), 0 40px 80px rgba(0,0,0,0.8);">
-        <h2 style="color: var(--red); font-size: 2rem;">💀 YOU'RE FIRED!</h2>
-        <p style="font-size: 1.1rem; color: var(--text-muted); margin-bottom: 24px;">You accrued 3 strikes and failed to handle critical incidents properly. HR has packed your desk.</p>
-        <div style="background: rgba(248,113,113,0.1); padding: 16px; border-radius: var(--radius-md); border: 1px solid rgba(248,113,113,0.3); margin-bottom: 24px;">
-          <h3 style="color: var(--text); margin-bottom: 8px;">Consequences:</h3>
-          <ul style="color: var(--text-dim); text-align: left; padding-left: 20px; font-size: 0.9rem;">
-            <li>All tickets, squad members, and upgrades lost.</li>
-            <li>Current level and prestige multipliers are maintained.</li>
-            <li>Unlocked skills and achievements are kept.</li>
-            <li>You must start climbing the ladder again.</li>
-          </ul>
-        </div>
-        <button id="btn-accept-fired" class="btn-close-help" style="background: linear-gradient(135deg, var(--red), darkred);">Pack My Desk</button>
-      </div>
-    </div>
-
-    <!-- ========== DISPATCH MODAL ========== -->
-  <div id="dispatch-modal" class="dispatch-modal hidden">
-    <div class="dispatch-overlay" id="dispatch-overlay"></div>
-    <div class="dispatch-panel">
-      <div class="dispatch-header">
-        <span id="dispatch-inc-icon" class="dispatch-inc-icon">🚨</span>
-        <div class="dispatch-inc-info">
-          <h2 id="dispatch-inc-title">CRITICAL INCIDENT</h2>
-          <p id="dispatch-inc-text"></p>
-        </div>
-        <div class="dispatch-countdown">
-          <span id="dispatch-countdown-num">30</span>
-          <small>seconds</small>
-        </div>
-      </div>
-      <div class="dispatch-skills-needed">
-        <span class="dispatch-skills-label">🎯 Best Skills:</span>
-        <div id="dispatch-required-skills" class="dispatch-skills-row"></div>
-      </div>
-      <div id="dispatch-briefing" class="dispatch-briefing">
-        <div id="dispatch-briefing-chips" class="dispatch-briefing-chips"></div>
-        <div class="dispatch-recommendation">
-          <div class="dispatch-recommendation-label">Recommended responder</div>
-          <div id="dispatch-recommendation-text" class="dispatch-recommendation-text">Scanning the squad for the least terrible option...</div>
-        </div>
-      </div>
-      <div id="dispatch-hero-list" class="dispatch-hero-list"></div>
-      <div class="dispatch-footer">
-        <span class="dispatch-footer-note">Perfect match = 3× reward &bull; Good match = 2× &bull; Any hero helps</span>
-        <button id="dispatch-self-btn" class="btn-dispatch-self">⚡ Handle Myself</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== HANDLE MYSELF MINIGAME MODAL ========== -->
-  <div id="minigame-modal" class="minigame-modal hidden">
-    <div class="minigame-overlay"></div>
-    <div class="minigame-panel" id="minigame-panel">
-      <!-- Active minigame -->
-      <div id="minigame-active">
-        <span id="minigame-icon" class="minigame-icon">🚨</span>
-        <div id="minigame-title" class="minigame-title">HANDLE IT YOURSELF</div>
-        <div id="minigame-subtitle" class="minigame-subtitle">Mash the button! Fill the bar before time runs out!</div>
-
-        <div class="minigame-timer-row">
-          <span>Response Progress</span>
-          <span id="minigame-timer" class="minigame-timer-val">15s</span>
-        </div>
-
-        <div class="minigame-bar-wrap">
-          <div id="minigame-bar" class="minigame-bar"></div>
-          <div id="minigame-bar-label" class="minigame-bar-label">0%</div>
-        </div>
-
-        <button id="btn-minigame-click" class="btn-minigame-click" aria-label="Click to resolve incident">
-          <span class="minigame-click-label">💻<br>RESOLVE!</span>
-        </button>
-
-        <div id="minigame-click-counter" class="minigame-clicks-counter">Clicks: <strong>0</strong></div>
-        <div id="minigame-reward-preview" class="minigame-reward-preview">Reward: <strong>calculating...</strong></div>
-
-        <button id="btn-minigame-resolve" class="btn-minigame-resolve hidden">✅ RESOLVED! Collect Reward</button>
-      </div>
-      <!-- Result screen -->
-      <div id="minigame-result" class="minigame-result hidden">
-        <span id="minigame-result-emoji" class="minigame-result-emoji">🎉</span>
-        <div id="minigame-result-title" class="minigame-result-title success">INCIDENT RESOLVED!</div>
-        <div id="minigame-result-reward" class="minigame-result-reward">+0 tickets</div>
-        <button id="btn-minigame-close" class="btn-dispatch-self" style="margin-top:16px;width:100%;">Continue</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== JS MODULES ========== -->
-  <script src="js/heroes.js"></script>
-  <script src="js/audio.js"></script>
-  <script type="module" src="js/constants.js"></script>
-  <script>
-    (function () {
-      const DIFFICULTY_LABELS = {
-        easy: { name: "Easy", desc: "~1 hour to CIO" },
-        medium: { name: "Medium", desc: "~5 hours to CIO" },
-        hard: { name: "Hard", desc: "~10 hours to CIO" },
-        insane: { name: "Maybe Try a Real Job?", desc: "~100 hours to CIO" },
-      };
-
-      const SAVE_HINTS = [
-        "serviceDeskHeroSave",
-        "serviceDeskHeroState",
-        "serviceDeskHero",
-        "servicedeskhero",
-        "sdhero",
-        "sdh-save",
-      ];
-      const DIFFICULTY_KEYS = [
-        "serviceDeskHeroDifficulty",
-        "sdhDifficulty",
-        "difficulty",
-        "difficultyMode",
-      ];
-      const MAIN_SCRIPT_ID = "service-desk-main-script";
-
-      function parseSavePayload(raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (!parsed || typeof parsed !== "object") {
-            return null;
-          }
-          return parsed;
-        } catch {
-          return null;
-        }
-      }
-
-      function hasExistingSave() {
-        const keys = Object.keys(localStorage);
-        const knownKey = keys.some((key) =>
-          SAVE_HINTS.some((hint) => key.toLowerCase().includes(hint.toLowerCase()))
-        );
-        if (knownKey) return true;
-
-        return keys.some((key) => {
-          const parsed = parseSavePayload(localStorage.getItem(key));
-          if (!parsed) {
-            return false;
-          }
-          return (
-            parsed.tickets !== undefined ||
-            parsed.lifetime !== undefined ||
-            parsed.lifetimeTickets !== undefined ||
-            parsed.stats !== undefined ||
-            parsed.achievements !== undefined ||
-            parsed.careerIndex !== undefined ||
-            parsed.heroLevel !== undefined ||
-            parsed.upgrades !== undefined ||
-            parsed.squad !== undefined
-          );
-        });
-      }
-
-      function getSavedDifficulty() {
-        const directSave = DIFFICULTY_KEYS.find((key) => DIFFICULTY_LABELS[localStorage.getItem(key)]);
-        if (directSave) return localStorage.getItem(directSave);
-
-        const difficultyKey = Object.keys(localStorage).find(
-          (key) => key.toLowerCase().includes("difficulty") && DIFFICULTY_LABELS[localStorage.getItem(key)]
-        );
-        if (difficultyKey) return localStorage.getItem(difficultyKey);
-
-        return "";
-      }
-
-      function syncDifficulty(id) {
-        const normalized = DIFFICULTY_LABELS[id] ? id : "medium";
-        window.__GAME_DIFFICULTY__ = normalized;
-        window.GAME_SETTINGS = window.GAME_SETTINGS || {};
-        window.GAME_SETTINGS.difficulty = normalized;
-
-        DIFFICULTY_KEYS.forEach((key) => localStorage.setItem(key, normalized));
-        localStorage.setItem("difficultyMode", normalized);
-
-        const difficultyDisplay = document.getElementById("difficulty-display");
-        if (difficultyDisplay) {
-          difficultyDisplay.textContent = DIFFICULTY_LABELS[normalized].name;
-        }
-      }
-
-      function loadMain() {
-        if (document.getElementById(MAIN_SCRIPT_ID)) return;
-        const script = document.createElement("script");
-        script.id = MAIN_SCRIPT_ID;
-        script.src = "js/main.js";
-        document.body.appendChild(script);
-      }
-
-      function startWithDifficulty(mode) {
-        syncDifficulty(mode);
-        const difficultyModal = document.getElementById("difficulty-modal");
-        if (difficultyModal) {
-          difficultyModal.classList.add("hidden");
-        }
-        loadMain();
-      }
-
-      function initDifficultyModal() {
-        const difficultyModal = document.getElementById("difficulty-modal");
-        if (!difficultyModal) {
-          loadMain();
-          return;
-        }
-
-        const selected = getSavedDifficulty() || "medium";
-        syncDifficulty(selected);
-
-        if (hasExistingSave()) {
-          difficultyModal.classList.add("hidden");
-          loadMain();
-          return;
-        }
-
-        difficultyModal.classList.remove("hidden");
-        difficultyModal.querySelectorAll("[data-difficulty]").forEach((button) => {
-          button.addEventListener("click", () => {
-            startWithDifficulty(button.getAttribute("data-difficulty"));
-          });
-        });
-      }
-
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", initDifficultyModal, { once: true });
-      } else {
-        initDifficultyModal();
-      }
-    })();
-  </script>
-  <!--BUILD_VERSION-->
-  </body>
-</html>
+<dialog id="character-dialog" aria-labelledby="character-title"><div class="character-shell"><header class="character-heading"><div><span class="eyebrow">CHARACTER SHEET · ALL CLOCKS PAUSED</span><h2 id="character-title">Your questionable build</h2><p><span id="dungeon-floor"></span> · <span id="dungeon-level"></span> · <span id="dungeon-xp"></span></p></div><button id="close-character-button" class="secondary-button">Return to work</button></header><div class="character-content"><nav id="floor-map" class="floor-map" aria-label="Dungeon floor progress"></nav><p id="character-class"></p><section><h3>Stats <span id="stat-points"></span></h3><div id="character-stats" class="stat-allocation"></div></section><section><h3>Skill tree <span id="skill-points"></span></h3><p class="panel-caption">Choose a branch at level 2, then one evolution at level 3. Choices last through this run.</p><div id="character-skills" class="skill-tree"></div></section><section><h3>Questionable equipment <span id="gear-points"></span></h3><p class="panel-caption">Choose one item from each floor’s cache. Each comes with a tradeoff.</p><div id="character-gear" class="gear-grid"></div></section><section><h3>What carries forward</h3><div id="dungeon-journal"></div></section></div></div></dialog>
+<dialog id="inbox-dialog" aria-labelledby="inbox-title"><div class="inbox-heading"><div><span class="eyebrow">FICTIONAL WORK CHAT & EMAIL</span><h2 id="inbox-title">The other dungeon</h2><p>Work clocks continue. Press P to pause, or close this inbox and use Pause.</p></div><button id="close-inbox-button" class="secondary-button">Close inbox</button></div><div id="inbox-messages"></div><p id="inbox-result" class="choice-result" role="status"></p></dialog>
+<dialog id="pause-dialog" aria-labelledby="pause-title"><div class="pause-content"><span class="eyebrow">DO NOT DISTURB</span><h2 id="pause-title">You’re on a break.</h2><p>The queue can wait. Really.<br>All game SLA clocks are paused, including Sev 1s.</p><button id="resume-button" class="primary-button">Back to the chaos</button><button id="quit-button" class="text-button">End shift and see score</button></div></dialog>
+<div id="achievement-banner" class="achievement-banner" role="status" hidden></div>
+<div id="announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+<noscript><p class="noscript">JavaScript is needed to play. Your browser can run the whole game locally once it’s enabled.</p></noscript>
+<script type="module" src="js/rush-ui.js"></script>
+<!--BUILD_VERSION-->
+</body></html>

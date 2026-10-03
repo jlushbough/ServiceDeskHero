@@ -283,6 +283,33 @@
 }
 .onboarding-item.done .onboarding-mark { color: var(--green); }
 .onboarding-mark { color: var(--gold); font-weight: 800; }
+.onboarding-copy {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  width:100%;
+}
+.onboarding-copy span:first-child {
+  flex: 1;
+}
+.onboarding-reward {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: var(--gold);
+  background: rgba(255,201,75,0.14);
+  border: 1px solid rgba(255,201,75,0.24);
+  border-radius: 999px;
+  padding: 3px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.onboarding-reward.claimed {
+  color: var(--green);
+  background: rgba(74,222,128,0.14);
+  border-color: rgba(74,222,128,0.24);
+}
 .btn-onboarding-action {
   width: 100%;
   padding: 9px;
@@ -325,6 +352,104 @@
   cursor: not-allowed;
   filter: grayscale(0.15);
   box-shadow: none;
+}
+
+.career-intel-panel {
+  border-color: rgba(96, 165, 250, 0.28);
+  background: linear-gradient(135deg, rgba(30,41,59,0.92), rgba(37,99,235,0.10));
+}
+
+.career-intel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.career-intel-title {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #dbeafe;
+}
+
+.career-intel-status {
+  font-size: 0.72rem;
+  color: #93c5fd;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.career-intel-progress {
+  position: relative;
+  overflow: hidden;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(15,23,42,0.85);
+  border: 1px solid rgba(96,165,250,0.18);
+  margin-bottom: 10px;
+}
+
+.career-intel-progress-bar {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--blue), #60a5fa, var(--gold));
+  box-shadow: 0 0 18px rgba(96,165,250,0.35);
+  transition: width 0.25s ease;
+}
+
+.career-intel-summary {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.career-intel-perks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.career-intel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15,23,42,0.6);
+  border: 1px solid rgba(148,163,184,0.18);
+  font-size: 0.74rem;
+  color: var(--text);
+}
+
+.career-intel-chip.highlight {
+  border-color: rgba(255,201,75,0.28);
+  color: #fef3c7;
+}
+
+.career-intel-reset-note {
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  padding-top: 10px;
+  border-top: 1px solid rgba(148,163,184,0.14);
+}
+
+.career-outlook-wrap {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(96,165,250,0.22);
+  background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(15,23,42,0.35));
+}
+
+.career-outlook-title {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  color: #dbeafe;
 }
 
 /* ── Squad ── */
@@ -508,6 +633,10 @@
 }
 .btn-levelup {
   background: linear-gradient(135deg, var(--purple), var(--blue));
+  color: #fff;
+}
+.btn-fire {
+  background: linear-gradient(135deg, rgba(248,113,113,0.95), rgba(185,28,28,0.95));
   color: #fff;
 }
 .btn-assign {
@@ -1328,6 +1457,100 @@
   border-color: rgba(255,201,75,0.25);
 }
 .btn-import:hover { background: rgba(255,201,75,0.18); transform: translateY(-1px); }
+
+/* ── Incident Log ── */
+.incident-log-wrap {
+  margin-top: 18px;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(96,165,250,0.18);
+  background: linear-gradient(180deg, rgba(15,23,42,0.72), rgba(30,41,59,0.58));
+}
+.incident-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.incident-log-subtitle {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+.incident-log-list {
+  display: grid;
+  gap: 10px;
+}
+.incident-log-item {
+  border-radius: 12px;
+  padding: 11px 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+}
+.incident-log-item.success { border-color: rgba(74,222,128,0.22); }
+.incident-log-item.warning { border-color: rgba(251,191,36,0.22); }
+.incident-log-item.danger { border-color: rgba(248,113,113,0.22); }
+.incident-log-item.neutral { border-color: rgba(148,163,184,0.16); }
+.incident-log-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.incident-log-title-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.incident-log-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+.incident-log-title {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--text);
+}
+.incident-log-meta {
+  margin-top: 2px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+.incident-log-pill {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.incident-log-pill.success { background: rgba(74,222,128,0.14); color: var(--green); }
+.incident-log-pill.warning { background: rgba(251,191,36,0.14); color: var(--gold); }
+.incident-log-pill.danger { background: rgba(248,113,113,0.14); color: var(--red); }
+.incident-log-pill.neutral { background: rgba(148,163,184,0.14); color: var(--text-muted); }
+.incident-log-body {
+  display: grid;
+  gap: 4px;
+  font-size: 0.79rem;
+  color: var(--text-dim);
+}
+.incident-log-body strong {
+  color: var(--text);
+}
+.incident-log-note {
+  color: var(--text-muted);
+}
+.incident-log-empty {
+  border-radius: 12px;
+  padding: 14px;
+  border: 1px dashed rgba(148,163,184,0.2);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  background: rgba(255,255,255,0.02);
+}
 
 /* ══════════════════════════════════════════
    HOW TO PLAY / HELP MODAL

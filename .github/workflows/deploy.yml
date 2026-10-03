@@ -1,14 +1,36 @@
-name: Deploy to S3 + CloudFront
+name: Manual deploy to S3 + CloudFront
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Validate game before deployment
+        run: npm run check && npm test && npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deployment-playtest-evidence
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -23,8 +45,8 @@ jobs:
           TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
           COMMIT="${GITHUB_SHA::7}"
           echo "BUILD_VERSION=${VERSION}" >> $GITHUB_ENV
-          # Inject version into index.html
-          sed -i "s|<!--BUILD_VERSION-->|<div id=\"build-version\" style=\"position:fixed;bottom:4px;right:8px;font-size:10px;color:rgba(255,255,255,0.25);pointer-events:none;z-index:9999;\">v${VERSION} (${COMMIT}) ${TIMESTAMP}</div>|" index.html
+          # Inject version into both game entry points
+          sed -i "s|<!--BUILD_VERSION-->|<div id=\"build-version\" style=\"position:fixed;bottom:4px;right:8px;font-size:10px;color:rgba(255,255,255,0.25);pointer-events:none;z-index:9999;\">v${VERSION} (${COMMIT}) ${TIMESTAMP}</div>|" index.html career.html
           # Also write a version.json for programmatic checks
           echo "{\"version\":\"${VERSION}\",\"commit\":\"${COMMIT}\",\"timestamp\":\"${TIMESTAMP}\"}" > version.json
 
@@ -34,7 +56,13 @@ jobs:
             --delete \
             --exclude ".git/*" \
             --exclude ".github/*" \
-            --cache-control "public, max-age=86400"
+            --exclude "node_modules/*" \
+            --exclude "tests/*" \
+            --exclude "test-results/*" \
+            --exclude "playwright-report/*" \
+            --exclude "package*.json" \
+            --exclude "playwright.config.js" \
+            --cache-control "public, max-age=0, must-revalidate"
 
       - name: Set correct content types
         run: |
@@ -44,24 +72,45 @@ jobs:
             --include "*.html" \
             --content-type "text/html" \
             --metadata-directive REPLACE \
-            --cache-control "public, max-age=3600"
+            --cache-control "public, max-age=0, must-revalidate"
           aws s3 cp s3://www.servicedeskhero.com/ s3://www.servicedeskhero.com/ \
             --recursive \
             --exclude "*" \
             --include "*.js" \
             --content-type "application/javascript" \
             --metadata-directive REPLACE \
-            --cache-control "public, max-age=86400"
+            --cache-control "public, max-age=0, must-revalidate"
           aws s3 cp s3://www.servicedeskhero.com/ s3://www.servicedeskhero.com/ \
             --recursive \
             --exclude "*" \
             --include "*.css" \
             --content-type "text/css" \
             --metadata-directive REPLACE \
-            --cache-control "public, max-age=86400"
+            --cache-control "public, max-age=0, must-revalidate"
 
       - name: Invalidate CloudFront cache
         run: |
           aws cloudfront create-invalidation \
             --distribution-id E1E5FO0J6V9IIP \
             --paths "/*"
+
+      - name: Verify live playtest version
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error --location --max-time 15 \
+              https://www.servicedeskhero.com/version.json -o /tmp/sdh-version.json; then
+              if node --input-type=module -e "import fs from 'node:fs'; const v=JSON.parse(fs.readFileSync('/tmp/sdh-version.json')); if(v.commit!==process.env.EXPECTED_COMMIT.slice(0,7)) process.exit(1); console.log(v);"; then
+                curl --fail --silent --show-error --location --max-time 15 https://www.servicedeskhero.com/ -o /tmp/sdh-live.html
+                grep -q 'DEV PLAYTEST' /tmp/sdh-live.html
+                curl --fail --silent --show-error --location --max-time 15 https://www.servicedeskhero.com/career.html -o /tmp/sdh-career.html
+                grep -q 'main-clicker' /tmp/sdh-career.html
+                echo "Verified live Rush Hour and Career at expected commit" >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+            fi
+            sleep 10
+          done
+          echo 'Live version could not be verified after cache propagation' >&2
+          exit 1
